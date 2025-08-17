@@ -1,0 +1,35 @@
+package bootstrap
+
+import (
+	"context"
+	"database/sql"
+
+	"gin-clean-starter/internal/infra/db"
+	"gin-clean-starter/internal/pkg/config"
+
+	"go.uber.org/fx"
+)
+
+var DBModule = fx.Module("db",
+	fx.Provide(
+		NewDB,
+	),
+)
+
+func NewDB(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
+	database, cleanup, err := db.Connect(cfg.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(fx.Hook{
+		OnStop: func(_ context.Context) error {
+			if cleanup != nil {
+				cleanup()
+			}
+			return nil
+		},
+	})
+
+	return database, nil
+}

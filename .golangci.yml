@@ -1,0 +1,56 @@
+version: "2"
+run:
+output:
+  formats:
+    text:
+      path: stdout
+linters:
+  # https://golangci-lint.run/usage/linters/
+  default: none # まず全て無効化
+  enable:
+    - errcheck # エラーハンドリング漏れ
+    - gocritic # より多くのスタイル指摘
+    - govet
+    - ineffassign # 効果のない代入
+    - revive
+    - staticcheck
+    - unused
+    # - gci # インポート順序・グループ化(gofmtと重複する場合ありなので不要)
+    # - stylecheck # スタイルチェック (gocriticと重複する場合ありなので不要)
+    # - typecheck # 型チェック (ビルドで通常検出可能なので不要)
+  settings:
+    govet:
+      enable:
+        - shadow
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - revive
+        text: don't use an underscore in package name
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - docs
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - inquiry_pro_go_back
+  exclusions:
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+      - docs
