@@ -1,0 +1,13 @@
+FROM golang:1.24.6-bullseye
+
+WORKDIR /app
+
+RUN go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+RUN curl -sSf https://atlasgo.sh | sh
+
+# Copy only migration-related files
+COPY atlas.hcl sqlc.yaml ./
+COPY migrations/ ./migrations/
+COPY internal/infra/queries/ ./internal/infra/queries/
+
+CMD ["atlas", "migrate", "status", "--env", "local"]

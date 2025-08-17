@@ -12,8 +12,6 @@ RUN go install github.com/air-verse/air@latest && \
     go install gotest.tools/gotestsum@latest && \
     go install github.com/swaggo/swag/cmd/swag@latest
 
-RUN curl -sSf https://atlasgo.sh | sh
-
 WORKDIR /app
 COPY . .
 

@@ -22,22 +22,32 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
-      APP_ENV: development
-      PORT: 8888
-      TZ: Asia/Tokyo
       DB_HOST: db
       DB_PORT: 5432
-      DB_USER: app
-      DB_PASSWORD: app
-      DB_NAME: app
-      DB_SSL_MODE: disable
-      CORS_ALLOW_ORIGINS: "http://localhost:3000,http://localhost:8080"
-
+      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
     ports:
       - "8888:8888"
     volumes:
       - ./:/app:cached
+
+  db-migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+    volumes:
+      - ./migrations:/app/migrations
+      - ./internal/infra/queries:/app/internal/infra/queries
+      - ./internal/infra/sqlc:/app/internal/infra/sqlc
+    profiles:
+      - migrate
 
 volumes:
   pgdata:
