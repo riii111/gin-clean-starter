@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jinzhu/copier"
 )
 
 type UserQueries interface {
@@ -42,18 +43,15 @@ func (r *userRepository) FindByEmail(ctx context.Context, email user.Email) (*re
 		return nil, "", infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to find user by email", err)
 	}
 
-	var companyID *uuid.UUID
-	if row.CompanyID.Valid {
-		id := uuid.UUID(row.CompanyID.Bytes)
-		companyID = &id
+	readModel := &readmodel.AuthorizedUserRM{}
+
+	if err := copier.Copy(readModel, &row); err != nil {
+		return nil, "", infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to copy fields", err)
 	}
 
-	readModel := &readmodel.AuthorizedUserRM{
-		ID:        row.ID,
-		Email:     row.Email,
-		Role:      row.Role,
-		CompanyID: companyID,
-		IsActive:  row.IsActive,
+	if row.CompanyID.Valid {
+		id := uuid.UUID(row.CompanyID.Bytes)
+		readModel.CompanyID = &id
 	}
 
 	return readModel, row.PasswordHash, nil
@@ -68,19 +66,18 @@ func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel
 		return nil, infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to find user by ID", err)
 	}
 
-	var companyID *uuid.UUID
-	if row.CompanyID.Valid {
-		id := uuid.UUID(row.CompanyID.Bytes)
-		companyID = &id
+	readModel := &readmodel.AuthorizedUserRM{}
+
+	if err := copier.Copy(readModel, &row); err != nil {
+		return nil, infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to copy fields", err)
 	}
 
-	return &readmodel.AuthorizedUserRM{
-		ID:        row.ID,
-		Email:     row.Email,
-		Role:      row.Role,
-		CompanyID: companyID,
-		IsActive:  row.IsActive,
-	}, nil
+	if row.CompanyID.Valid {
+		id := uuid.UUID(row.CompanyID.Bytes)
+		readModel.CompanyID = &id
+	}
+
+	return readModel, nil
 }
 
 func (r *userRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
