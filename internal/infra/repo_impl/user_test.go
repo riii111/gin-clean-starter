@@ -103,7 +103,7 @@ func TestFindByEmail(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, userReadModel)
 				assert.Empty(t, hash)
-				
+
 				// エラー種別の検証
 				if tt.mockError == sql.ErrNoRows {
 					assert.True(t, infra.IsKind(err, infra.KindNotFound))
@@ -130,7 +130,7 @@ func TestFindByEmail(t *testing.T) {
 func TestFindByID(t *testing.T) {
 	testUser := builder.NewUserBuilder().BuildInfra()
 	inactiveUser := builder.NewUserBuilder().AsInactive().BuildInfra()
-	
+
 	testUserRow := sqlc.FindUserByIDRow{
 		ID:        testUser.ID,
 		Email:     testUser.Email,
@@ -207,7 +207,7 @@ func TestFindByID(t *testing.T) {
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, userReadModel)
-				
+
 				// エラー種別の検証
 				if tt.mockError == sql.ErrNoRows {
 					assert.True(t, infra.IsKind(err, infra.KindNotFound))
