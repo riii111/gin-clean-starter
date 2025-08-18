@@ -84,8 +84,9 @@ func (m *AuthMiddleware) RequireRoleAtLeast(minRole user.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, ok := GetUserRole(c)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "User role not found in context",
+			// Unexpected error: should be used after RequireAuth()
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"error": "Internal server error",
 			})
 			c.Abort()
 			return

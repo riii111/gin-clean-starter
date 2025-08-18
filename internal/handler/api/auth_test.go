@@ -206,8 +206,8 @@ func (s *AuthHandlerTestSuite) TestMe() {
 		s.Equal(returnUser.Email, response["email"])
 	})
 
-	s.Run("異常系: 認証なしで401が返却される", func() {
+	s.Run("異常系: 認証なしで500が返却される", func() {
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "")
-		helper.AssertErrorResponse(s.T(), rec, http.StatusUnauthorized, "User not authenticated")
+		helper.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal server error")
 	})
 }
