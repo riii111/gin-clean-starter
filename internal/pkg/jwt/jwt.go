@@ -15,32 +15,59 @@ var (
 	ErrExpiredToken = errors.New("token expired")
 )
 
+type TokenType string
+
+const (
+	TokenTypeAccess  TokenType = "access"
+	TokenTypeRefresh TokenType = "refresh"
+)
+
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Role   string    `json:"role"`
+	UserID    uuid.UUID `json:"user_id"`
+	Role      string    `json:"role"`
+	TokenType TokenType `json:"token_type"`
 	jwt.RegisteredClaims
 }
 
 type Service struct {
-	secretKey     []byte
-	tokenDuration time.Duration
+	secretKey            []byte
+	accessTokenDuration  time.Duration
+	refreshTokenDuration time.Duration
 }
 
-func NewService(secretKey string, tokenDuration time.Duration) *Service {
+func NewService(secretKey string, accessTokenDuration, refreshTokenDuration time.Duration) *Service {
 	return &Service{
-		secretKey:     []byte(secretKey),
-		tokenDuration: tokenDuration,
+		secretKey:            []byte(secretKey),
+		accessTokenDuration:  accessTokenDuration,
+		refreshTokenDuration: refreshTokenDuration,
 	}
 }
 
-func (s *Service) GenerateToken(userID uuid.UUID, role user.Role) (string, error) {
+func (s *Service) GenerateAccessToken(userID uuid.UUID, role user.Role) (string, error) {
+	return s.generateToken(userID, role, TokenTypeAccess, s.accessTokenDuration)
+}
+
+func (s *Service) GenerateRefreshToken(userID uuid.UUID, role user.Role) (string, error) {
+	return s.generateToken(userID, role, TokenTypeRefresh, s.refreshTokenDuration)
+}
+
+func (s *Service) GetAccessTokenDuration() time.Duration {
+	return s.accessTokenDuration
+}
+
+func (s *Service) GetRefreshTokenDuration() time.Duration {
+	return s.refreshTokenDuration
+}
+
+func (s *Service) generateToken(userID uuid.UUID, role user.Role, tokenType TokenType, duration time.Duration) (string, error) {
 	now := time.Now()
 	claims := Claims{
-		UserID: userID,
-		Role:   role.String(),
+		UserID:    userID,
+		Role:      role.String(),
+		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(s.tokenDuration)),
+			ExpiresAt: jwt.NewNumericDate(now.Add(duration)),
 		},
 	}
 

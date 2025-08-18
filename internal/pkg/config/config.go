@@ -19,6 +19,7 @@ type Config struct {
 	CORS   CORSConfig
 	Log    LogConfig
 	JWT    JWTConfig
+	Cookie CookieConfig
 }
 
 type ServerConfig struct {
@@ -52,8 +53,16 @@ type LogConfig struct {
 }
 
 type JWTConfig struct {
-	Secret   string `envconfig:"JWT_SECRET" required:"true"`
-	Duration string `envconfig:"JWT_DURATION" default:"24h"`
+	Secret               string `envconfig:"JWT_SECRET" required:"true"`
+	AccessTokenDuration  string `envconfig:"JWT_ACCESS_TOKEN_DURATION" default:"15m"`
+	RefreshTokenDuration string `envconfig:"JWT_REFRESH_TOKEN_DURATION" default:"7d"`
+}
+
+type CookieConfig struct {
+	Secure    bool   `envconfig:"COOKIE_SECURE" default:"false"`
+	SameSite  string `envconfig:"COOKIE_SAME_SITE" default:"Lax"`
+	Domain    string `envconfig:"COOKIE_DOMAIN" default:""`
+	HTTPSOnly bool   `envconfig:"COOKIE_HTTPS_ONLY" default:"true"`
 }
 
 func (c *DBConfig) BuildDSN() string {
@@ -91,6 +100,17 @@ func NewTestConfig() Config {
 			TimeZone:       "Asia/Tokyo",
 			TimeFormat:     "2006-01-02 15:04:05.000",
 			TimeZoneOffset: 32400,
+		},
+		JWT: JWTConfig{
+			Secret:               "test-jwt-secret-key",
+			AccessTokenDuration:  "15m",
+			RefreshTokenDuration: "7d",
+		},
+		Cookie: CookieConfig{
+			Secure:    false,
+			SameSite:  "Lax",
+			Domain:    "",
+			HTTPSOnly: false,
 		},
 	}
 }

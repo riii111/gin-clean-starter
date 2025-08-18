@@ -16,12 +16,15 @@ var JWTModule = fx.Module("jwt",
 )
 
 func NewJWTService(cfg config.Config) *jwt.Service {
-	tokenDuration := 24 * time.Hour
-	if cfg.JWT.Duration != "" {
-		if duration, err := time.ParseDuration(cfg.JWT.Duration); err == nil {
-			tokenDuration = duration
-		}
+	accessTokenDuration, err := time.ParseDuration(cfg.JWT.AccessTokenDuration)
+	if err != nil {
+		panic("invalid JWT_ACCESS_TOKEN_DURATION: " + err.Error())
 	}
 
-	return jwt.NewService(cfg.JWT.Secret, tokenDuration)
+	refreshTokenDuration, err := time.ParseDuration(cfg.JWT.RefreshTokenDuration)
+	if err != nil {
+		panic("invalid JWT_REFRESH_TOKEN_DURATION: " + err.Error())
+	}
+
+	return jwt.NewService(cfg.JWT.Secret, accessTokenDuration, refreshTokenDuration)
 }
