@@ -6,13 +6,13 @@ import (
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/handler/middleware"
 	"gin-clean-starter/internal/pkg/config"
 	"gin-clean-starter/internal/pkg/cookie"
 	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/usecase"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 )
 
 type AuthHandler struct {
@@ -108,18 +108,11 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /auth/me [get]
 func (h *AuthHandler) Me(c *gin.Context) {
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "User not authenticated",
-		})
-		return
-	}
-
-	userID, ok := userIDStr.(uuid.UUID)
+	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid user ID",
+		// Unexpected error: auth middleware should guarantee user_id exists
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Internal server error",
 		})
 		return
 	}

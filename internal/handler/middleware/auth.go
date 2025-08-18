@@ -21,6 +21,12 @@ const (
 	ctxUserRoleKey = "user_role"
 )
 
+var roleHierarchy = map[user.Role]int{
+	user.RoleViewer:   1,
+	user.RoleOperator: 2,
+	user.RoleAdmin:    3,
+}
+
 func NewAuthMiddleware(authUseCase usecase.AuthUseCase) *AuthMiddleware {
 	return &AuthMiddleware{
 		authUseCase: authUseCase,
@@ -59,10 +65,21 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		c.Set(ctxUserIDKey, userID)
 		c.Set(ctxUserRoleKey, role)
+		c.Set("jwt_claims", map[string]any{
+			"user_id": userID.String(),
+			"role":    string(role),
+		})
 		c.Next()
 	}
 }
 
+func hasMinimumRole(userRole, minRole user.Role) bool {
+	userLevel, userExists := roleHierarchy[userRole]
+	minLevel, minExists := roleHierarchy[minRole]
+	return userExists && minExists && userLevel >= minLevel
+}
+
+// FOR FUTURE USE
 func (m *AuthMiddleware) RequireRoleAtLeast(minRole user.Role) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, ok := GetUserRole(c)
@@ -86,20 +103,42 @@ func (m *AuthMiddleware) RequireRoleAtLeast(minRole user.Role) gin.HandlerFunc {
 	}
 }
 
-func hasMinimumRole(userRole, minRole user.Role) bool {
-	roleHierarchy := map[user.Role]int{
-		user.RoleViewer:   1,
-		user.RoleOperator: 2,
-		user.RoleAdmin:    3,
+// FOR FUTURE USE: authenticates the request if a token is present, but does not abort on failure.
+func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var token string
+		token = cookie.GetAccessToken(c)
+		if token == "" {
+			authHeader := c.GetHeader("Authorization")
+			if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimSpace(authHeader[len("Bearer "):])
+			}
+		}
+
+		if token == "" {
+			// No token present; continue without setting context.
+			c.Next()
+			return
+		}
+
+		userID, role, err := m.authUseCase.ValidateToken(token)
+		if err != nil {
+			// Invalid token; continue without aborting.
+			c.Next()
+			return
+		}
+
+		c.Set(ctxUserIDKey, userID)
+		c.Set(ctxUserRoleKey, role)
+		c.Set("jwt_claims", map[string]any{
+			"user_id": userID.String(),
+			"role":    string(role),
+		})
+		c.Next()
 	}
-
-	userLevel, userExists := roleHierarchy[userRole]
-	minLevel, minExists := roleHierarchy[minRole]
-
-	return userExists && minExists && userLevel >= minLevel
 }
 
-// GetUserID returns the authenticated user ID from context.
+// FOR FUTURE USE: returns the authenticated user ID from context
 func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 	userID, exists := c.Get(ctxUserIDKey)
 	if !exists {
@@ -110,7 +149,7 @@ func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
-// GetUserRole returns the authenticated user role from context.
+// FOR FUTURE USE: GetUserRole returns the authenticated user role from context
 func GetUserRole(c *gin.Context) (user.Role, bool) {
 	userRole, exists := c.Get(ctxUserRoleKey)
 	if !exists {
