@@ -27,8 +27,14 @@ type UserRepository interface {
 	UpdateLastLogin(ctx context.Context, userID uuid.UUID) error
 }
 
+type TokenPair struct {
+	AccessToken  string
+	RefreshToken string
+}
+
 type AuthUseCase interface {
 	Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
 	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error)
 	ValidateToken(tokenString string) (uuid.UUID, user.Role, error)
 }
@@ -48,28 +54,78 @@ func NewAuthUseCase(userRepo UserRepository, jwtService *jwt.Service) AuthUseCas
 func (a *authUseCaseImpl) Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error) {
 	userReadModel, err := a.validateUser(ctx, credentials)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 
 	role, err := user.NewRole(userReadModel.Role)
 	if err != nil {
-		return "", nil, ErrAuthenticationFailed
+		return nil, nil, ErrAuthenticationFailed
 	}
 
-	token, err := a.jwtService.GenerateToken(userReadModel.ID, role)
+	accessToken, err := a.jwtService.GenerateAccessToken(userReadModel.ID, role)
 	if err != nil {
-		return "", nil, ErrTokenGeneration
+		return nil, nil, ErrTokenGeneration
+	}
+
+	refreshToken, err := a.jwtService.GenerateRefreshToken(userReadModel.ID, role)
+	if err != nil {
+		return nil, nil, ErrTokenGeneration
 	}
 
 	err = a.userRepo.UpdateLastLogin(ctx, userReadModel.ID)
 	if err != nil {
-		return "", nil, err
+		return nil, nil, err
 	}
 
-	return token, userReadModel, nil
+	tokenPair := &TokenPair{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	return tokenPair, userReadModel, nil
 }
 
-func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials auth.Credentials) (*readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
+	claims, err := a.jwtService.ValidateToken(refreshToken)
+	if err != nil {
+		return nil, ErrTokenValidation
+	}
+
+	if claims.TokenType != jwt.TokenTypeRefresh {
+		return nil, ErrTokenValidation
+	}
+
+	role, err := user.NewRole(claims.Role)
+	if err != nil {
+		return nil, ErrTokenValidation
+	}
+
+	userReadModel, err := a.userRepo.FindByID(ctx, claims.UserID)
+	if err != nil || userReadModel == nil {
+		return nil, ErrUserNotFound
+	}
+
+	if !userReadModel.IsActive {
+		return nil, ErrUserInactive
+	}
+
+	accessToken, err := a.jwtService.GenerateAccessToken(claims.UserID, role)
+	if err != nil {
+		return nil, ErrTokenGeneration
+	}
+
+	newRefreshToken, err := a.jwtService.GenerateRefreshToken(claims.UserID, role)
+	if err != nil {
+		return nil, ErrTokenGeneration
+	}
+
+	return &TokenPair{
+		AccessToken:  accessToken,
+		RefreshToken: newRefreshToken,
+	}, nil
+}
+
+func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Credentials) (*readmodel.AuthorizedUserRM, error) {
 	userReadModel, hashedPassword, err := a.userRepo.FindByEmail(ctx, credentials.Email())
 	if err != nil {
 		return nil, ErrUserNotFound
@@ -107,6 +163,10 @@ func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 func (a *authUseCaseImpl) ValidateToken(tokenString string) (uuid.UUID, user.Role, error) {
 	claims, err := a.jwtService.ValidateToken(tokenString)
 	if err != nil {
+		return uuid.Nil, "", ErrTokenValidation
+	}
+
+	if claims.TokenType != jwt.TokenTypeAccess {
 		return uuid.Nil, "", ErrTokenValidation
 	}
 

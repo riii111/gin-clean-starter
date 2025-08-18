@@ -6,6 +6,9 @@ import (
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/pkg/config"
+	"gin-clean-starter/internal/pkg/cookie"
+	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/usecase"
 
 	"github.com/gin-gonic/gin"
@@ -14,11 +17,15 @@ import (
 
 type AuthHandler struct {
 	authUseCase usecase.AuthUseCase
+	jwtService  *jwt.Service
+	cfg         config.Config
 }
 
-func NewAuthHandler(authUseCase usecase.AuthUseCase) *AuthHandler {
+func NewAuthHandler(authUseCase usecase.AuthUseCase, jwtService *jwt.Service, cfg config.Config) *AuthHandler {
 	return &AuthHandler{
 		authUseCase: authUseCase,
+		jwtService:  jwtService,
+		cfg:         cfg,
 	}
 }
 
@@ -49,7 +56,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, user, err := h.authUseCase.Login(c.Request.Context(), credentials)
+	pair, user, err := h.authUseCase.Login(c.Request.Context(), credentials)
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrInvalidCredentials):
@@ -72,10 +79,10 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	response := resdto.LoginResponse{
-		AccessToken: token,
-		User:        user,
-	}
+	cookie.SetTokenCookies(c, h.cfg.Cookie, pair.AccessToken, pair.RefreshToken,
+		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
+
+	response := resdto.LoginResponse{User: user}
 	c.JSON(http.StatusOK, response)
 }
 
@@ -87,8 +94,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// For JWT-based stateless authentication, logout is handled client-side
-	// by removing the token from client storage. Server simply returns 204 No Content.
+	cookie.ClearTokenCookies(c, h.cfg.Cookie)
 	c.Status(http.StatusNoContent)
 }
 
@@ -138,4 +144,36 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// @Summary Refresh access token
+// @Description Refresh access token using refresh token from cookie
+// @Tags auth
+// @Produce json
+// @Success 200 {object} gin.H
+// @Failure 401 {object} map[string]string
+// @Router /auth/refresh [post]
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	refreshToken := cookie.GetRefreshToken(c)
+	if refreshToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Refresh token not found",
+		})
+		return
+	}
+
+	pair, err := h.authUseCase.RefreshToken(c.Request.Context(), refreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "Invalid or expired refresh token",
+		})
+		return
+	}
+
+	cookie.SetTokenCookies(c, h.cfg.Cookie, pair.AccessToken, pair.RefreshToken,
+		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Token refreshed successfully",
+	})
 }

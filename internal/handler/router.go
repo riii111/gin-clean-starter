@@ -12,9 +12,9 @@ import (
 	"gin-clean-starter/internal/pkg/config"
 )
 
-func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler) {
+func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler, authMiddleware *middleware.AuthMiddleware) {
 	setupMiddleware(engine, cfg)
-	setupRoutes(engine, authHandler)
+	setupRoutes(engine, authHandler, authMiddleware)
 }
 
 func setupMiddleware(engine *gin.Engine, cfg config.Config) {
@@ -23,7 +23,7 @@ func setupMiddleware(engine *gin.Engine, cfg config.Config) {
 	engine.Use(gin.Recovery())
 }
 
-func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler) {
+func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, authMiddleware *middleware.AuthMiddleware) {
 	engine.GET("/health", healthCheck)
 
 	if gin.Mode() == gin.DebugMode {
@@ -35,6 +35,14 @@ func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler) {
 		auth := apiGroup.Group("/auth")
 		{
 			auth.POST("/login", authHandler.Login)
+			auth.POST("/refresh", authHandler.Refresh)
+
+			authRequired := auth.Group("")
+			authRequired.Use(authMiddleware.RequireAuth())
+			{
+				authRequired.POST("/logout", authHandler.Logout)
+				authRequired.GET("/me", authHandler.Me)
+			}
 		}
 	}
 }

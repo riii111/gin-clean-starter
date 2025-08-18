@@ -1,7 +1,7 @@
 package request
 
 import (
-	"gin-clean-starter/internal/domain/auth"
+	"gin-clean-starter/internal/domain/user"
 )
 
 type LoginRequest struct {
@@ -9,6 +9,6 @@ type LoginRequest struct {
 	Password string `json:"password" binding:"required,min=8"`
 }
 
-func (r *LoginRequest) ToDomain() (auth.Credentials, error) {
-	return auth.NewCredentials(r.Email, r.Password)
+func (r *LoginRequest) ToDomain() (user.Credentials, error) {
+	return user.NewCredentials(r.Email, r.Password)
 }

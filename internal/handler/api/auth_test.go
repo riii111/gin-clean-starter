@@ -10,9 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"gin-clean-starter/internal/domain/auth"
+	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/handler/api"
 	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/pkg/config"
+	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/usecase"
 	"gin-clean-starter/tests/common/builder"
 	"gin-clean-starter/tests/common/helper"
@@ -38,7 +40,8 @@ func (s *AuthHandlerTestSuite) SetupTest() {
 
 	s.mockCtrl = gomock.NewController(s.T())
 	s.mockAUC = usecasemock.NewMockAuthUseCase(s.mockCtrl)
-	s.handler = api.NewAuthHandler(s.mockAUC)
+	mockJWTService := &jwt.Service{} // Mock JWT service for testing
+	s.handler = api.NewAuthHandler(s.mockAUC, mockJWTService, config.NewTestConfig())
 
 	s.router.POST("/auth/login", s.handler.Login)
 	s.router.POST("/auth/logout", s.handler.Logout)
@@ -72,16 +75,16 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 	reqBody := builder.NewAuthBuilder().BuildDTO()
 	returnUser := builder.NewUserBuilder().BuildReadModel()
 	expectedToken := "test-jwt-token"
+	expectedRefresh := "test-refresh-token"
 
 	s.Run("正常系: 有効なリクエストで200 OKが返却される", func() {
-		creds, _ := auth.NewCredentials(reqBody.Email, reqBody.Password)
+		creds, _ := user.NewCredentials(reqBody.Email, reqBody.Password)
 		s.mockAUC.EXPECT().Login(gomock.Any(), creds).
-			Return(expectedToken, returnUser, nil).Times(1)
+			Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil).Times(1)
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 
 		var response resdto.LoginResponse
 		helper.AssertSuccessResponse(s.T(), rec, http.StatusOK, &response)
-		s.Equal(expectedToken, response.AccessToken)
 		s.Equal(returnUser.Email, response.User.Email)
 	})
 
@@ -120,9 +123,9 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 					if tc.expectCode == http.StatusOK {
 						email, _ := requestMap["email"].(string)
 						password, _ := requestMap["password"].(string)
-						creds, _ := auth.NewCredentials(email, password)
+						creds, _ := user.NewCredentials(email, password)
 						s.mockAUC.EXPECT().Login(gomock.Any(), creds).
-							Return(expectedToken, returnUser, nil)
+							Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil)
 					}
 					rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "")
 					if tc.expectCode == http.StatusOK {
@@ -170,9 +173,9 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name, func() {
-				creds, _ := auth.NewCredentials(reqBody.Email, reqBody.Password)
+				creds, _ := user.NewCredentials(reqBody.Email, reqBody.Password)
 				s.mockAUC.EXPECT().Login(gomock.Any(), creds).
-					Return("", nil, tc.usecaseError).Times(1)
+					Return(nil, nil, tc.usecaseError).Times(1)
 
 				rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)

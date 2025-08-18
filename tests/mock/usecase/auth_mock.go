@@ -11,8 +11,8 @@ package usecasemock
 
 import (
 	context "context"
-	auth "gin-clean-starter/internal/domain/auth"
 	user "gin-clean-starter/internal/domain/user"
+	usecase "gin-clean-starter/internal/usecase"
 	readmodel "gin-clean-starter/internal/usecase/readmodel"
 	reflect "reflect"
 
@@ -129,10 +129,10 @@ func (mr *MockAuthUseCaseMockRecorder) GetCurrentUser(ctx, userID any) *gomock.C
 }
 
 // Login mocks base method.
-func (m *MockAuthUseCase) Login(ctx context.Context, credentials auth.Credentials) (string, *readmodel.AuthorizedUserRM, error) {
+func (m *MockAuthUseCase) Login(ctx context.Context, credentials user.Credentials) (*usecase.TokenPair, *readmodel.AuthorizedUserRM, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Login", ctx, credentials)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(*usecase.TokenPair)
 	ret1, _ := ret[1].(*readmodel.AuthorizedUserRM)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -142,6 +142,21 @@ func (m *MockAuthUseCase) Login(ctx context.Context, credentials auth.Credential
 func (mr *MockAuthUseCaseMockRecorder) Login(ctx, credentials any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockAuthUseCase)(nil).Login), ctx, credentials)
+}
+
+// RefreshToken mocks base method.
+func (m *MockAuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*usecase.TokenPair, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RefreshToken", ctx, refreshToken)
+	ret0, _ := ret[0].(*usecase.TokenPair)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RefreshToken indicates an expected call of RefreshToken.
+func (mr *MockAuthUseCaseMockRecorder) RefreshToken(ctx, refreshToken any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockAuthUseCase)(nil).RefreshToken), ctx, refreshToken)
 }
 
 // ValidateToken mocks base method.
