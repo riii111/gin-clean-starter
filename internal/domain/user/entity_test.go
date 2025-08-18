@@ -4,7 +4,6 @@ package user_test
 
 import (
 	"testing"
-	"time"
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/tests/common/builder"
@@ -154,25 +153,3 @@ func runCases(t *testing.T, cases []testCase) {
 	}
 }
 
-func TestUser_UpdateLastLogin(t *testing.T) {
-	t.Parallel()
-
-	testUser, err := builder.NewUserBuilder().BuildDomain()
-	require.NoError(t, err)
-
-	initialCreatedAt := testUser.CreatedAt()
-	initialUpdatedAt := testUser.UpdatedAt()
-
-	// Ensure time difference for UpdatedAt comparison
-	time.Sleep(time.Millisecond * 10)
-
-	testUser.UpdateLastLogin()
-
-	assert.NotNil(t, testUser.LastLogin(), "last login should be set")
-	assert.True(t, testUser.LastLogin().After(initialCreatedAt), "last login should be after creation")
-	assert.True(t, testUser.UpdatedAt().After(initialUpdatedAt), "updated at should be updated")
-	assert.Equal(t, initialCreatedAt, testUser.CreatedAt(), "created at should not change")
-
-	assert.WithinDuration(t, *testUser.LastLogin(), testUser.UpdatedAt(), time.Millisecond,
-		"last login and updated at should be set at the same time")
-}

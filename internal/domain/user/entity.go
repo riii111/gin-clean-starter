@@ -21,7 +21,6 @@ type User struct {
 }
 
 func NewUser(email Email, passwordHash string, role Role, companyID *uuid.UUID) *User {
-	now := time.Now()
 	return &User{
 		id:           uuid.New(),
 		email:        email,
@@ -29,8 +28,6 @@ func NewUser(email Email, passwordHash string, role Role, companyID *uuid.UUID) 
 		role:         role,
 		companyID:    companyID,
 		isActive:     true,
-		createdAt:    now,
-		updatedAt:    now,
 	}
 }
 
@@ -43,9 +40,3 @@ func (u *User) LastLogin() *time.Time { return u.lastLogin }
 func (u *User) IsActive() bool        { return u.isActive }
 func (u *User) CreatedAt() time.Time  { return u.createdAt }
 func (u *User) UpdatedAt() time.Time  { return u.updatedAt }
-
-func (u *User) UpdateLastLogin() {
-	now := time.Now()
-	u.lastLogin = &now
-	u.updatedAt = now
-}
