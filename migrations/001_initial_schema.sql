@@ -85,13 +85,10 @@ CREATE TABLE idempotency_keys (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Partial unique index: email must be unique only for active users
 CREATE UNIQUE INDEX idx_users_email_active_unique ON users(email) WHERE is_active = true;
 
--- Index for email lookups (including inactive users for login validation)
 CREATE INDEX idx_users_email ON users(email);
 
--- Partial index for company lookups on active users
 CREATE INDEX idx_users_company_id_active ON users(company_id) WHERE is_active = true;
 CREATE INDEX idx_reservations_resource_id ON reservations(resource_id);
 CREATE INDEX idx_reservations_user_id ON reservations(user_id);
