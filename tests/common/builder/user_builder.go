@@ -32,6 +32,11 @@ func NewUserBuilder() *UserBuilder {
 	}
 }
 
+func (u *UserBuilder) With(mutate func(*UserBuilder)) *UserBuilder {
+	mutate(u)
+	return u
+}
+
 // Build methods
 func (u *UserBuilder) BuildDomain() (*user.User, error) {
 	email, err := user.NewEmail(u.Email)
