@@ -41,6 +41,36 @@ func NewPassword(s string) (Password, error) {
 	return Password{value: s}, nil
 }
 
+type Credentials struct {
+	email    Email
+	password Password
+}
+
+func NewCredentials(emailStr, passwordStr string) (Credentials, error) {
+	email, err := NewEmail(emailStr)
+	if err != nil {
+		return Credentials{}, err
+	}
+
+	password, err := NewPassword(passwordStr)
+	if err != nil {
+		return Credentials{}, err
+	}
+
+	return Credentials{
+		email:    email,
+		password: password,
+	}, nil
+}
+
+func (c Credentials) Email() Email {
+	return c.email
+}
+
+func (c Credentials) Password() Password {
+	return c.password
+}
+
 func (p Password) Value() string {
 	return p.value
 }

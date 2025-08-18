@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"gin-clean-starter/internal/domain/auth"
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/pkg/password"
@@ -29,7 +28,7 @@ type UserRepository interface {
 }
 
 type AuthUseCase interface {
-	Login(ctx context.Context, credentials auth.Credentials) (string, *readmodel.AuthorizedUserRM, error)
+	Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error)
 	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error)
 	ValidateToken(tokenString string) (uuid.UUID, user.Role, error)
 }
@@ -46,7 +45,7 @@ func NewAuthUseCase(userRepo UserRepository, jwtService *jwt.Service) AuthUseCas
 	}
 }
 
-func (a *authUseCaseImpl) Login(ctx context.Context, credentials auth.Credentials) (string, *readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error) {
 	userReadModel, err := a.validateUser(ctx, credentials)
 	if err != nil {
 		return "", nil, err
