@@ -2,9 +2,10 @@ package infra
 
 import (
 	"errors"
-	"log/slog"
 
 	"gin-clean-starter/internal/pkg/errs"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 type RepositoryErrorKind string
@@ -26,12 +27,13 @@ func (e RepositoryError) Unwrap() error {
 	return e.err
 }
 
-func WrapRepoErr(slogger *slog.Logger, kind RepositoryErrorKind, msg string, err error) error {
-	logArgs := []any{
-		slog.String("kind", string(kind)),
+func WrapRepoErr(msg string, err error, kinds ...RepositoryErrorKind) error {
+	var kind RepositoryErrorKind
+	if len(kinds) > 0 {
+		kind = kinds[0] // Use specified kind
+	} else {
+		kind = classifyPgErr(err) // Auto-classify if not specified
 	}
-
-	slogger.Error("Repository error: "+msg, logArgs...)
 
 	if err != nil {
 		err = errs.Wrap(err, msg)
@@ -48,10 +50,23 @@ func IsKind(err error, kind RepositoryErrorKind) bool {
 	return false
 }
 
-// Infrastructure-specific error kinds
 const (
 	KindNotFound           RepositoryErrorKind = "NOT_FOUND"
 	KindDBFailure          RepositoryErrorKind = "DB_FAILURE"
 	KindDuplicateKey       RepositoryErrorKind = "DUPLICATE_KEY"
 	KindForeignKeyViolated RepositoryErrorKind = "FOREIGN_KEY_VIOLATED"
 )
+
+func classifyPgErr(err error) RepositoryErrorKind {
+	if pgErr, ok := err.(*pgconn.PgError); ok {
+		switch pgErr.Code {
+		case "23505": // unique_violation
+			return KindDuplicateKey
+		case "23503": // foreign_key_violation
+			return KindForeignKeyViolated
+		default:
+			return KindDBFailure
+		}
+	}
+	return KindDBFailure
+}

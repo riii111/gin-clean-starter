@@ -8,6 +8,7 @@ import (
 
 var Module = fx.Options(
 	ConfigModule,
+	LoggerModule,
 	DBModule,
 	JWTModule,
 	components.RepositoryModule,

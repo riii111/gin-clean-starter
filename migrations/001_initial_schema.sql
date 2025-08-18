@@ -1,5 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE companies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -10,7 +11,7 @@ CREATE TABLE companies (
 
 CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email TEXT NOT NULL UNIQUE,
+    email CITEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('viewer', 'operator', 'admin')),
     company_id UUID REFERENCES companies(id),
@@ -84,8 +85,14 @@ CREATE TABLE idempotency_keys (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Partial unique index: email must be unique only for active users
+CREATE UNIQUE INDEX idx_users_email_active_unique ON users(email) WHERE is_active = true;
+
+-- Index for email lookups (including inactive users for login validation)
 CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_company_id ON users(company_id);
+
+-- Partial index for company lookups on active users
+CREATE INDEX idx_users_company_id_active ON users(company_id) WHERE is_active = true;
 CREATE INDEX idx_reservations_resource_id ON reservations(resource_id);
 CREATE INDEX idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX idx_reservations_slot ON reservations USING gist(slot);

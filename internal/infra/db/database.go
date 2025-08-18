@@ -1,39 +1,32 @@
 package db
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"time"
 
 	"gin-clean-starter/internal/pkg/config"
 
-	_ "github.com/lib/pq" // PostgreSQL driver
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func Connect(cfg config.DBConfig) (*sql.DB, func(), error) {
-	dsn := cfg.BuildDSN()
+func Connect(cfg config.DBConfig) (*pgxpool.Pool, func(), error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	db, err := sql.Open("postgres", dsn)
+	pool, err := pgxpool.New(ctx, cfg.BuildDSN())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, nil, fmt.Errorf("failed to create connection pool: %w", err)
 	}
 
-	// Test the connection
-	if err := db.Ping(); err != nil {
-		db.Close()
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
 		return nil, nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
-	db.SetMaxIdleConns(10)
-	db.SetMaxOpenConns(100)
-	db.SetConnMaxLifetime(time.Hour)
-
 	cleanup := func() {
-		if err := db.Close(); err != nil {
-			// Log error in production
-			fmt.Printf("Error closing database: %v\n", err)
-		}
+		pool.Close()
 	}
 
-	return db, cleanup, nil
+	return pool, cleanup, nil
 }

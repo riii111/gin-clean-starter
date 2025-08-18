@@ -4,93 +4,95 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"log/slog"
-	"time"
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase"
 	"gin-clean-starter/internal/usecase/readmodel"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jinzhu/copier"
 )
 
 type UserQueries interface {
-	FindUserByEmail(ctx context.Context, email string) (sqlc.Users, error)
-	FindUserByID(ctx context.Context, id uuid.UUID) (sqlc.FindUserByIDRow, error)
-	UpdateUserLastLogin(ctx context.Context, params sqlc.UpdateUserLastLoginParams) error
+	FindUserByEmail(ctx context.Context, db sqlc.DBTX, email string) (sqlc.Users, error)
+	FindUserByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.FindUserByIDRow, error)
+	UpdateUserLastLogin(ctx context.Context, db sqlc.DBTX, id uuid.UUID) error
 }
 
-type userRepository struct {
+type UserRepository struct {
 	queries UserQueries
+	db      sqlc.DBTX
 }
 
-func NewUserRepository(queries *sqlc.Queries) usecase.UserRepository {
-	return &userRepository{
+func NewUserRepository(queries *sqlc.Queries, db sqlc.DBTX) *UserRepository {
+	return &UserRepository{
 		queries: queries,
+		db:      db,
 	}
 }
 
-func (r *userRepository) FindByEmail(ctx context.Context, email user.Email) (*readmodel.AuthorizedUserRM, string, error) {
-	row, err := r.queries.FindUserByEmail(ctx, email.Value())
+func (r *UserRepository) FindByEmail(ctx context.Context, email user.Email) (*readmodel.AuthorizedUserRM, string, error) {
+	row, err := r.queries.FindUserByEmail(ctx, r.db, email.Value())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, "", infra.WrapRepoErr(slog.Default(), infra.KindNotFound, "user not found", err)
+			return nil, "", infra.WrapRepoErr("user not found", err, infra.KindNotFound)
 		}
-		return nil, "", infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to find user by email", err)
+		return nil, "", infra.WrapRepoErr("failed to find user by email", err)
 	}
 
-	readModel := &readmodel.AuthorizedUserRM{}
-
-	if err := copier.Copy(readModel, &row); err != nil {
-		return nil, "", infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to copy fields", err)
-	}
-
-	if row.CompanyID.Valid {
-		id := uuid.UUID(row.CompanyID.Bytes)
-		readModel.CompanyID = &id
-	}
-
+	readModel := toAuthorizedUserRMFromUsers(row)
 	return readModel, row.PasswordHash, nil
 }
 
-func (r *userRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
-	row, err := r.queries.FindUserByID(ctx, id)
+func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
+	row, err := r.queries.FindUserByID(ctx, r.db, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, infra.WrapRepoErr(slog.Default(), infra.KindNotFound, "user not found", err)
+			return nil, infra.WrapRepoErr("user not found", err, infra.KindNotFound)
 		}
-		return nil, infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to find user by ID", err)
+		return nil, infra.WrapRepoErr("failed to find user by ID", err)
 	}
 
-	readModel := &readmodel.AuthorizedUserRM{}
-
-	if err := copier.Copy(readModel, &row); err != nil {
-		return nil, infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to copy fields", err)
-	}
-
-	if row.CompanyID.Valid {
-		id := uuid.UUID(row.CompanyID.Bytes)
-		readModel.CompanyID = &id
-	}
-
+	readModel := toAuthorizedUserRMFromFindByIDRow(row)
 	return readModel, nil
 }
 
-func (r *userRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
-	params := sqlc.UpdateUserLastLoginParams{
-		ID: userID,
-		LastLogin: pgtype.Timestamptz{
-			Time:  time.Now(),
-			Valid: true,
-		},
-	}
-	err := r.queries.UpdateUserLastLogin(ctx, params)
+func (r *UserRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
+	err := r.queries.UpdateUserLastLogin(ctx, r.db, userID)
 	if err != nil {
-		return infra.WrapRepoErr(slog.Default(), infra.KindDBFailure, "failed to update user last login", err)
+		return infra.WrapRepoErr("failed to update user last login", err)
 	}
 	return nil
+}
+
+func toAuthorizedUserRMFromUsers(row sqlc.Users) *readmodel.AuthorizedUserRM {
+	rm := &readmodel.AuthorizedUserRM{
+		ID:       row.ID,
+		Email:    row.Email,
+		Role:     row.Role,
+		IsActive: row.IsActive,
+	}
+
+	if row.CompanyID.Valid {
+		companyID := uuid.UUID(row.CompanyID.Bytes)
+		rm.CompanyID = &companyID
+	}
+
+	return rm
+}
+
+func toAuthorizedUserRMFromFindByIDRow(row sqlc.FindUserByIDRow) *readmodel.AuthorizedUserRM {
+	rm := &readmodel.AuthorizedUserRM{
+		ID:       row.ID,
+		Email:    row.Email,
+		Role:     row.Role,
+		IsActive: row.IsActive,
+	}
+
+	if row.CompanyID.Valid {
+		companyID := uuid.UUID(row.CompanyID.Bytes)
+		rm.CompanyID = &companyID
+	}
+
+	return rm
 }

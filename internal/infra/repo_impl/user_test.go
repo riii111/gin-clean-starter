@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"gin-clean-starter/internal/domain/user"
+	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/tests/common/builder"
 
@@ -21,23 +22,24 @@ type MockQueries struct {
 	mock.Mock
 }
 
-func (m *MockQueries) FindUserByEmail(ctx context.Context, email string) (sqlc.Users, error) {
-	args := m.Called(ctx, email)
+func (m *MockQueries) FindUserByEmail(ctx context.Context, db sqlc.DBTX, email string) (sqlc.Users, error) {
+	args := m.Called(ctx, db, email)
 	return args.Get(0).(sqlc.Users), args.Error(1)
 }
 
-func (m *MockQueries) FindUserByID(ctx context.Context, id uuid.UUID) (sqlc.FindUserByIDRow, error) {
-	args := m.Called(ctx, id)
+func (m *MockQueries) FindUserByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.FindUserByIDRow, error) {
+	args := m.Called(ctx, db, id)
 	return args.Get(0).(sqlc.FindUserByIDRow), args.Error(1)
 }
 
-func (m *MockQueries) UpdateUserLastLogin(ctx context.Context, params sqlc.UpdateUserLastLoginParams) error {
-	args := m.Called(ctx, params)
+func (m *MockQueries) UpdateUserLastLogin(ctx context.Context, db sqlc.DBTX, id uuid.UUID) error {
+	args := m.Called(ctx, db, id)
 	return args.Error(0)
 }
 
 func TestFindByEmail(t *testing.T) {
 	testUser := builder.NewUserBuilder().BuildInfra()
+	inactiveUser := builder.NewUserBuilder().AsInactive().BuildInfra()
 
 	tests := []struct {
 		name       string
@@ -49,12 +51,21 @@ func TestFindByEmail(t *testing.T) {
 		wantError  bool
 	}{
 		{
-			name:       "success",
+			name:       "success - active user",
 			email:      testUser.Email,
 			mockReturn: testUser,
 			mockError:  nil,
 			wantUser:   true,
 			wantHash:   testUser.PasswordHash,
+			wantError:  false,
+		},
+		{
+			name:       "success - inactive user (for validation)",
+			email:      inactiveUser.Email,
+			mockReturn: inactiveUser,
+			mockError:  nil,
+			wantUser:   true,
+			wantHash:   inactiveUser.PasswordHash,
 			wantError:  false,
 		},
 		{
@@ -80,9 +91,9 @@ func TestFindByEmail(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockQueries := new(MockQueries)
-			mockQueries.On("FindUserByEmail", mock.Anything, tt.email).Return(tt.mockReturn, tt.mockError)
+			mockQueries.On("FindUserByEmail", mock.Anything, mock.Anything, tt.email).Return(tt.mockReturn, tt.mockError)
 
-			repo := &userRepository{queries: mockQueries}
+			repo := &UserRepository{queries: mockQueries}
 			email, err := user.NewEmail(tt.email)
 			require.NoError(t, err)
 
@@ -92,6 +103,13 @@ func TestFindByEmail(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, userReadModel)
 				assert.Empty(t, hash)
+				
+				// エラー種別の検証
+				if tt.mockError == sql.ErrNoRows {
+					assert.True(t, infra.IsKind(err, infra.KindNotFound))
+				} else {
+					assert.True(t, infra.IsKind(err, infra.KindDBFailure))
+				}
 			} else {
 				assert.NoError(t, err)
 				if tt.wantUser {
@@ -111,6 +129,8 @@ func TestFindByEmail(t *testing.T) {
 
 func TestFindByID(t *testing.T) {
 	testUser := builder.NewUserBuilder().BuildInfra()
+	inactiveUser := builder.NewUserBuilder().AsInactive().BuildInfra()
+	
 	testUserRow := sqlc.FindUserByIDRow{
 		ID:        testUser.ID,
 		Email:     testUser.Email,
@@ -122,6 +142,17 @@ func TestFindByID(t *testing.T) {
 		UpdatedAt: testUser.UpdatedAt,
 	}
 
+	inactiveUserRow := sqlc.FindUserByIDRow{
+		ID:        inactiveUser.ID,
+		Email:     inactiveUser.Email,
+		Role:      inactiveUser.Role,
+		CompanyID: inactiveUser.CompanyID,
+		IsActive:  inactiveUser.IsActive,
+		LastLogin: inactiveUser.LastLogin,
+		CreatedAt: inactiveUser.CreatedAt,
+		UpdatedAt: inactiveUser.UpdatedAt,
+	}
+
 	tests := []struct {
 		name       string
 		userID     uuid.UUID
@@ -131,9 +162,17 @@ func TestFindByID(t *testing.T) {
 		wantError  bool
 	}{
 		{
-			name:       "success",
+			name:       "success - active user",
 			userID:     testUserRow.ID,
 			mockReturn: testUserRow,
+			mockError:  nil,
+			wantUser:   true,
+			wantError:  false,
+		},
+		{
+			name:       "success - inactive user (for validation)",
+			userID:     inactiveUserRow.ID,
+			mockReturn: inactiveUserRow,
 			mockError:  nil,
 			wantUser:   true,
 			wantError:  false,
@@ -159,15 +198,22 @@ func TestFindByID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockQueries := new(MockQueries)
-			mockQueries.On("FindUserByID", mock.Anything, tt.userID).Return(tt.mockReturn, tt.mockError)
+			mockQueries.On("FindUserByID", mock.Anything, mock.Anything, tt.userID).Return(tt.mockReturn, tt.mockError)
 
-			repo := &userRepository{queries: mockQueries}
+			repo := &UserRepository{queries: mockQueries}
 
 			userReadModel, err := repo.FindByID(context.Background(), tt.userID)
 
 			if tt.wantError {
 				assert.Error(t, err)
 				assert.Nil(t, userReadModel)
+				
+				// エラー種別の検証
+				if tt.mockError == sql.ErrNoRows {
+					assert.True(t, infra.IsKind(err, infra.KindNotFound))
+				} else {
+					assert.True(t, infra.IsKind(err, infra.KindDBFailure))
+				}
 			} else {
 				assert.NoError(t, err)
 				if tt.wantUser {
@@ -209,16 +255,15 @@ func TestUpdateLastLogin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockQueries := new(MockQueries)
-			mockQueries.On("UpdateUserLastLogin", mock.Anything, mock.MatchedBy(func(params sqlc.UpdateUserLastLoginParams) bool {
-				return params.ID == tt.userID && params.LastLogin.Valid
-			})).Return(tt.mockError)
+			mockQueries.On("UpdateUserLastLogin", mock.Anything, mock.Anything, tt.userID).Return(tt.mockError)
 
-			repo := &userRepository{queries: mockQueries}
+			repo := &UserRepository{queries: mockQueries}
 
 			err := repo.UpdateLastLogin(context.Background(), tt.userID)
 
 			if tt.wantError {
 				assert.Error(t, err)
+				assert.True(t, infra.IsKind(err, infra.KindDBFailure))
 			} else {
 				assert.NoError(t, err)
 			}

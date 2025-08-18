@@ -2,11 +2,11 @@ package bootstrap
 
 import (
 	"context"
-	"database/sql"
 
 	"gin-clean-starter/internal/infra/db"
 	"gin-clean-starter/internal/pkg/config"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/fx"
 )
 
@@ -16,8 +16,8 @@ var DBModule = fx.Module("db",
 	),
 )
 
-func NewDB(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
-	database, cleanup, err := db.Connect(cfg.DB)
+func NewDB(lc fx.Lifecycle, cfg config.Config) (*pgxpool.Pool, error) {
+	pool, cleanup, err := db.Connect(cfg.DB)
 	if err != nil {
 		return nil, err
 	}
@@ -31,5 +31,5 @@ func NewDB(lc fx.Lifecycle, cfg config.Config) (*sql.DB, error) {
 		},
 	})
 
-	return database, nil
+	return pool, nil
 }

@@ -36,8 +36,8 @@ type CreateUserRow struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (CreateUserRow, error) {
-	row := q.db.QueryRow(ctx, createUser,
+func (q *Queries) CreateUser(ctx context.Context, db DBTX, arg CreateUserParams) (CreateUserRow, error) {
+	row := db.QueryRow(ctx, createUser,
 		arg.Email,
 		arg.PasswordHash,
 		arg.Role,
@@ -69,12 +69,11 @@ SELECT
     created_at,
     updated_at
 FROM users
-WHERE email =
-$1 AND is_active = true
+WHERE email = $1
 `
 
-func (q *Queries) FindUserByEmail(ctx context.Context, email string) (Users, error) {
-	row := q.db.QueryRow(ctx, findUserByEmail, email)
+func (q *Queries) FindUserByEmail(ctx context.Context, db DBTX, email string) (Users, error) {
+	row := db.QueryRow(ctx, findUserByEmail, email)
 	var i Users
 	err := row.Scan(
 		&i.ID,
@@ -93,7 +92,7 @@ func (q *Queries) FindUserByEmail(ctx context.Context, email string) (Users, err
 const findUserByID = `-- name: FindUserByID :one
 SELECT id, email, role, company_id, last_login, is_active, created_at, updated_at
 FROM users 
-WHERE id = $1 AND is_active = true
+WHERE id = $1
 `
 
 type FindUserByIDRow struct {
@@ -107,8 +106,8 @@ type FindUserByIDRow struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (FindUserByIDRow, error) {
-	row := q.db.QueryRow(ctx, findUserByID, id)
+func (q *Queries) FindUserByID(ctx context.Context, db DBTX, id uuid.UUID) (FindUserByIDRow, error) {
+	row := db.QueryRow(ctx, findUserByID, id)
 	var i FindUserByIDRow
 	err := row.Scan(
 		&i.ID,
@@ -125,16 +124,11 @@ func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (FindUserByIDR
 
 const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
 UPDATE users 
-SET last_login = $2, updated_at = NOW()
+SET last_login = NOW(), updated_at = NOW()
 WHERE id = $1
 `
 
-type UpdateUserLastLoginParams struct {
-	ID        uuid.UUID          `json:"id"`
-	LastLogin pgtype.Timestamptz `json:"last_login"`
-}
-
-func (q *Queries) UpdateUserLastLogin(ctx context.Context, arg UpdateUserLastLoginParams) error {
-	_, err := q.db.Exec(ctx, updateUserLastLogin, arg.ID, arg.LastLogin)
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, db DBTX, id uuid.UUID) error {
+	_, err := db.Exec(ctx, updateUserLastLogin, id)
 	return err
 }
