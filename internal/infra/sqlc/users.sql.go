@@ -12,17 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countUsers = `-- name: CountUsers :one
-SELECT COUNT(*) FROM users WHERE is_active = true
-`
-
-func (q *Queries) CountUsers(ctx context.Context) (int64, error) {
-	row := q.db.QueryRow(ctx, countUsers)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, role, company_id, is_active)
 VALUES ($1, $2, $3, $4, true)
@@ -132,59 +121,6 @@ func (q *Queries) FindUserByID(ctx context.Context, id uuid.UUID) (FindUserByIDR
 		&i.UpdatedAt,
 	)
 	return i, err
-}
-
-const listUsers = `-- name: ListUsers :many
-SELECT id, email, role, company_id, last_login, is_active, created_at, updated_at
-FROM users 
-WHERE is_active = true
-ORDER BY created_at DESC
-LIMIT $1 OFFSET $2
-`
-
-type ListUsersParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
-}
-
-type ListUsersRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Role      string             `json:"role"`
-	CompanyID pgtype.UUID        `json:"company_id"`
-	LastLogin pgtype.Timestamptz `json:"last_login"`
-	IsActive  bool               `json:"is_active"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]ListUsersRow, error) {
-	rows, err := q.db.Query(ctx, listUsers, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListUsersRow
-	for rows.Next() {
-		var i ListUsersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Email,
-			&i.Role,
-			&i.CompanyID,
-			&i.LastLogin,
-			&i.IsActive,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const updateUserLastLogin = `-- name: UpdateUserLastLogin :exec
