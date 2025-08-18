@@ -33,6 +33,9 @@ type Service struct {
 	secretKey            []byte
 	accessTokenDuration  time.Duration
 	refreshTokenDuration time.Duration
+	issuer               string
+	audience             string
+	keyID                string
 }
 
 func NewService(secretKey string, accessTokenDuration, refreshTokenDuration time.Duration) *Service {
@@ -40,6 +43,9 @@ func NewService(secretKey string, accessTokenDuration, refreshTokenDuration time
 		secretKey:            []byte(secretKey),
 		accessTokenDuration:  accessTokenDuration,
 		refreshTokenDuration: refreshTokenDuration,
+		issuer:               "gin-clean-starter",
+		audience:             "gin-clean-starter-api",
+		keyID:                "default",
 	}
 }
 
@@ -66,12 +72,16 @@ func (s *Service) generateToken(userID uuid.UUID, role user.Role, tokenType Toke
 		Role:      role.String(),
 		TokenType: tokenType,
 		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    s.issuer,
+			Audience:  []string{s.audience},
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(duration)),
+			ID:        uuid.NewString(),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token.Header["kid"] = s.keyID
 	return token.SignedString(s.secretKey)
 }
 
@@ -92,6 +102,21 @@ func (s *Service) ValidateToken(tokenString string) (*Claims, error) {
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+
+	if claims.Issuer != s.issuer {
+		return nil, ErrInvalidToken
+	}
+
+	validAudience := false
+	for _, aud := range claims.Audience {
+		if aud == s.audience {
+			validAudience = true
+			break
+		}
+	}
+	if !validAudience {
 		return nil, ErrInvalidToken
 	}
 

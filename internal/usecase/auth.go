@@ -3,6 +3,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"log/slog"
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/pkg/jwt"
@@ -74,7 +75,7 @@ func (a *authUseCaseImpl) Login(ctx context.Context, credentials user.Credential
 
 	err = a.userRepo.UpdateLastLogin(ctx, userReadModel.ID)
 	if err != nil {
-		return nil, nil, err
+		slog.Warn("failed to update last login", "user_id", userReadModel.ID, "error", err)
 	}
 
 	tokenPair := &TokenPair{
@@ -128,14 +129,11 @@ func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string)
 func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Credentials) (*readmodel.AuthorizedUserRM, error) {
 	userReadModel, hashedPassword, err := a.userRepo.FindByEmail(ctx, credentials.Email())
 	if err != nil {
-		return nil, ErrUserNotFound
+		// Return same error as password mismatch to prevent user enumeration attacks
+		return nil, ErrInvalidCredentials
 	}
 
-	if userReadModel == nil {
-		return nil, ErrUserNotFound
-	}
-
-	if !userReadModel.IsActive {
+	if userReadModel == nil || !userReadModel.IsActive {
 		return nil, ErrUserInactive
 	}
 
@@ -162,11 +160,7 @@ func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 
 func (a *authUseCaseImpl) ValidateToken(tokenString string) (uuid.UUID, user.Role, error) {
 	claims, err := a.jwtService.ValidateToken(tokenString)
-	if err != nil {
-		return uuid.Nil, "", ErrTokenValidation
-	}
-
-	if claims.TokenType != jwt.TokenTypeAccess {
+	if err != nil || claims.TokenType != jwt.TokenTypeAccess {
 		return uuid.Nil, "", ErrTokenValidation
 	}
 

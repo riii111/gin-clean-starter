@@ -12,14 +12,21 @@ var (
 	ErrInvalidPassword  = errors.New("invalid password")
 )
 
-const DefaultCost = bcrypt.DefaultCost
+const (
+	DefaultCost  = bcrypt.DefaultCost
+	MaxBcryptLen = 72 // bcrypt truncates passwords longer than 72 bytes
+)
 
 func HashPassword(password string) (string, error) {
-	if password == "" {
+	return HashPasswordWithCost(password, DefaultCost)
+}
+
+func HashPasswordWithCost(password string, cost int) (string, error) {
+	if password == "" || len(password) > MaxBcryptLen {
 		return "", ErrInvalidPassword
 	}
 
-	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), DefaultCost)
+	hashedBytes, err := bcrypt.GenerateFromPassword([]byte(password), cost)
 	if err != nil {
 		return "", ErrHashingFailed
 	}
@@ -28,17 +35,28 @@ func HashPassword(password string) (string, error) {
 }
 
 func ComparePassword(hashedPassword, password string) error {
-	if hashedPassword == "" || password == "" {
+	if hashedPassword == "" || password == "" || len(password) > MaxBcryptLen {
 		return ErrInvalidPassword
 	}
 
 	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 	if err != nil {
-		if errors.Is(err, bcrypt.ErrMismatchedHashAndPassword) {
-			return ErrComparisonFailed
-		}
-		return err
+		// Normalize all bcrypt errors to prevent information leakage
+		return ErrComparisonFailed
 	}
 
 	return nil
+}
+
+func NeedsRehash(hashedPassword string, desiredCost int) bool {
+	if hashedPassword == "" {
+		return false
+	}
+
+	cost, err := bcrypt.Cost([]byte(hashedPassword))
+	if err != nil {
+		return true
+	}
+
+	return cost != desiredCost
 }
