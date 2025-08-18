@@ -18,6 +18,7 @@ type Config struct {
 	DB     DBConfig
 	CORS   CORSConfig
 	Log    LogConfig
+	JWT    JWTConfig
 }
 
 type ServerConfig struct {
@@ -48,6 +49,11 @@ type LogConfig struct {
 	TimeZone       string `envconfig:"LOG_TIMEZONE" default:"Asia/Tokyo"`
 	TimeFormat     string `envconfig:"LOG_TIME_FORMAT" default:"2006-01-02 15:04:05.000"`
 	TimeZoneOffset int    `envconfig:"LOG_TIMEZONE_OFFSET" default:"32400"` // 9*60*60
+}
+
+type JWTConfig struct {
+	Secret   string `envconfig:"JWT_SECRET" required:"true"`
+	Duration string `envconfig:"JWT_DURATION" default:"24h"`
 }
 
 func (c *DBConfig) BuildDSN() string {
