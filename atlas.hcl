@@ -1,3 +1,24 @@
+# Prevent production accidents
+lint {
+  destructive {
+    error = true
+  }
+  latest = 1
+}
+
+# Avoid downtime and lock conflicts
+diff {
+  skip {
+    drop_schema = true
+    drop_table  = true
+    drop_column = true
+  }
+  concurrent_index {
+    create = true
+    drop   = true
+  }
+}
+
 env "dev" {
   src = "file://migrations"
   dev = "docker://postgres/17/dev?search_path=public"

@@ -1,0 +1,96 @@
+[tools]
+go = "1.24.6"
+
+[env]
+APP_ENV = "development"
+PORT = "8888"
+TZ = "Asia/Tokyo"
+DB_HOST = "localhost"
+DB_PORT = "15432"
+DB_USER = "app"
+DB_PASSWORD = "app"
+DB_NAME = "app"
+DB_SSL_MODE = "disable"
+
+[tasks]
+# Help
+help = '''
+echo "Available mise tasks:"
+echo "  help         - Show this help message"
+echo ""
+echo "Development:"
+echo "  dev          - Start development environment with hot reload"
+echo "  dev-local    - Start local development with air (hot reload)"
+echo "  install      - Install Go dependencies"
+echo ""
+echo "Docker operations:"
+echo "  build        - Build all Docker images"
+echo "  up           - Start all services in background"
+echo "  down         - Stop all services"
+echo "  logs         - Show logs from all services"
+echo "  restart      - Restart all services"
+echo ""
+echo "Database operations:"
+echo "  sqlc:gen     - Generate sqlc code from queries"
+echo "  migrate:up   - Apply database migrations"
+echo "  migrate:down - Rollback database migrations" 
+echo "  migrate:status - Show migration status"
+echo "  migrate:new  - Create new migration file"
+echo "  migrate:hash - Generate migration hash file"
+echo ""
+echo "Code quality:"
+echo "  lint         - Run golangci-lint"
+echo "  fmt          - Format Go code"
+echo "  lint:fix     - Auto-fix linting issues"
+echo "  sql:lint     - Lint SQL files with sqruff"
+echo "  sql:fix      - Auto-fix SQL issues"
+echo "  sql:format   - Format SQL files"
+echo ""
+echo "Testing:"
+echo "  test-unit    - Run unit tests only"
+echo "  test-e2e     - Run E2E tests only"
+echo "  test-all     - Run all tests (unit + e2e)"
+echo "  test-clean   - Clean Go test cache"
+echo ""
+echo "Mock:"
+echo "  mock:gen     - Generate mock files using mockgen"
+'''
+
+# Development
+dev = "docker compose up"
+dev-local = "air"
+install = "go mod download && go mod tidy"
+
+# Docker operations
+build = "docker compose build"
+up = "docker compose up -d"
+down = "docker compose down"
+logs = "docker compose logs -f"
+restart = ["mise run down", "mise run up"]
+
+# Code quality
+lint = "golangci-lint run"
+fmt = ["gofmt -s -w .", "goimports -w ."]
+"lint:fix" = ["golangci-lint fmt", "golangci-lint run --fix"]
+
+# SQL quality
+"sql:lint" = "sqruff lint migrations/ internal/infra/queries/"
+"sql:fix" = "sqruff fix migrations/ internal/infra/queries/"
+"sql:format" = "sqruff format migrations/ internal/infra/queries/"
+
+# Database operations (HCL-first)
+"sqlc:gen" = "docker compose run --rm db-migrate sqlc generate"
+"migrate:up" = "docker compose run --rm db-migrate atlas migrate apply --env local"
+"migrate:down" = "docker compose run --rm db-migrate atlas migrate down --env local"
+"migrate:status" = "docker compose run --rm db-migrate atlas migrate status --env local"
+"migrate:diff" = "docker compose run --rm db-migrate atlas migrate diff --env local --to file://schema.hcl"
+"migrate:hash" = "docker compose run --rm db-migrate atlas migrate hash --env local"
+
+# Testing
+test-unit = "docker compose exec app gotestsum --format pkgname --format-hide-empty-pkg --format-icons hivis -- -tags=unit ./..."
+test-e2e = "docker compose exec app gotestsum --format testname --format-icons hivis -- -tags=e2e ./tests/e2e/..."
+test-all = "docker compose exec app gotestsum --format pkgname-and-test-fails --format-hide-empty-pkg --format-icons hivis -- -tags=e2e,unit ./..."
+test-clean = "docker compose exec app go clean -testcache"
+
+# Mock generation
+"mock:gen" = "bash scripts/generate_mocks.sh"

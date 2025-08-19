@@ -27,10 +27,6 @@ go.work
 *.tmp
 *.temp
 
-# Development tools config
-.air.toml
-.mise.toml
-
 # IDE files
 .vscode/
 .idea/
