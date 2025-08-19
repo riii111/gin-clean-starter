@@ -12,6 +12,7 @@ import (
 var RepositoryModule = fx.Module("repository",
 	fx.Provide(
 		NewSQLQueries,
+		NewDBTX,
 		fx.Annotate(
 			repo_impl.NewUserRepository,
 			fx.As(new(usecase.UserRepository)),
@@ -21,4 +22,8 @@ var RepositoryModule = fx.Module("repository",
 
 func NewSQLQueries(_ *pgxpool.Pool) *sqlc.Queries {
 	return sqlc.New()
+}
+
+func NewDBTX(pool *pgxpool.Pool) sqlc.DBTX {
+	return pool
 }

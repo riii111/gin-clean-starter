@@ -58,7 +58,8 @@ const (
 )
 
 func classifyPgErr(err error) RepositoryErrorKind {
-	if pgErr, ok := err.(*pgconn.PgError); ok {
+	pgErr := &pgconn.PgError{}
+	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case "23505": // unique_violation
 			return KindDuplicateKey

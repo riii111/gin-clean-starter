@@ -55,7 +55,7 @@ type LogConfig struct {
 type JWTConfig struct {
 	Secret               string `envconfig:"JWT_SECRET" required:"true"`
 	AccessTokenDuration  string `envconfig:"JWT_ACCESS_TOKEN_DURATION" default:"15m"`
-	RefreshTokenDuration string `envconfig:"JWT_REFRESH_TOKEN_DURATION" default:"7d"`
+	RefreshTokenDuration string `envconfig:"JWT_REFRESH_TOKEN_DURATION" default:"168h"`
 }
 
 type CookieConfig struct {
@@ -104,7 +104,7 @@ func NewTestConfig() Config {
 		JWT: JWTConfig{
 			Secret:               "test-jwt-secret-key",
 			AccessTokenDuration:  "15m",
-			RefreshTokenDuration: "7d",
+			RefreshTokenDuration: "168h",
 		},
 		Cookie: CookieConfig{
 			Secure:    false,

@@ -28,7 +28,6 @@ type testCase struct {
 
 func TestUser(t *testing.T) {
 	t.Run("基本成功ケース", func(t *testing.T) {
-		t.Parallel()
 
 		actual, err := builder.NewUserBuilder().BuildDomain()
 		require.NoError(t, err)
@@ -49,7 +48,6 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("メールアドレス検証", func(t *testing.T) {
-		t.Parallel()
 		runCases(t, []testCase{
 			{
 				name:   "有効なメールアドレスOK",
@@ -74,7 +72,6 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("ロール検証", func(t *testing.T) {
-		t.Parallel()
 		runCases(t, []testCase{
 			{
 				name:   "admin ロールOK",
@@ -102,7 +99,6 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("会社ID検証", func(t *testing.T) {
-		t.Parallel()
 		runCases(t, []testCase{
 			{
 				name: "会社ID有りOK",
@@ -119,7 +115,6 @@ func TestUser(t *testing.T) {
 	})
 
 	t.Run("状態検証", func(t *testing.T) {
-		t.Parallel()
 		runCases(t, []testCase{
 			{
 				name:   "アクティブユーザーOK",
@@ -137,7 +132,6 @@ func runCases(t *testing.T, cases []testCase) {
 	t.Helper()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
 
 			actual, err := builder.NewUserBuilder().With(c.mutate).BuildDomain()
 

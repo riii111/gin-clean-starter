@@ -210,4 +210,42 @@ func (s *AuthHandlerTestSuite) TestMe() {
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "")
 		helper.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal server error")
 	})
+
+	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+		testCases := []struct {
+			name           string
+			usecaseError   error
+			expectedStatus int
+			expectedMsg    string
+		}{
+			{
+				name:           "ユーザー見つからない",
+				usecaseError:   usecase.ErrUserNotFound,
+				expectedStatus: http.StatusNotFound,
+				expectedMsg:    "User not found",
+			},
+			{
+				name:           "ユーザー無効",
+				usecaseError:   usecase.ErrUserInactive,
+				expectedStatus: http.StatusForbidden,
+				expectedMsg:    "Account is inactive",
+			},
+			{
+				name:           "内部サーバーエラー",
+				usecaseError:   errors.New("database error"),
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Internal server error",
+			},
+		}
+
+		for _, tc := range testCases {
+			s.Run(tc.name, func() {
+				s.mockAUC.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
+					Return(nil, tc.usecaseError).Times(1)
+
+				rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
+				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
+			})
+		}
+	})
 }
