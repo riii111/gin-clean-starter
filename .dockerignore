@@ -1,0 +1,75 @@
+# Version control
+.git
+.gitignore
+
+# Environment files (handled by compose env_file)
+.env*
+!.env.example
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Test artifacts
+*.test
+coverage.txt
+coverage.html
+coverage.out
+
+# Build artifacts
+/bin/
+/dist/
+/build/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.out
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation (if not needed in container)
+README.md
+.docs/
+
+# Docker files (avoid recursive Docker builds)
+Dockerfile*
+compose.yml
+docker-compose*.yml
+.dockerignore
+
+# Development tools config
+.golangci.yml
+.sqruff
+atlas.hcl
+
+# Scripts (unless needed in container)
+scripts/
+
+# Mise configuration
+.mise.toml
