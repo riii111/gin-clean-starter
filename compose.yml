@@ -43,6 +43,7 @@ services:
     environment:
       DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
     volumes:
+      - ./sqlc.yaml:/app/sqlc.yaml
       - ./migrations:/app/migrations
       - ./internal/infra/queries:/app/internal/infra/queries
       - ./internal/infra/sqlc:/app/internal/infra/sqlc

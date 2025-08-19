@@ -1,5 +1,9 @@
 version: "2"
 run:
+  timeout: 5m
+  tests: true
+  skip-dirs:
+    - internal/infra/sqlc
 output:
   formats:
     text:
@@ -15,6 +19,11 @@ linters:
     - revive
     - staticcheck
     - unused
+    - errorlint
+    - errname
+    - misspell
+    - gocyclo
+    - gosec
     # - gci # インポート順序・グループ化(gofmtと重複する場合ありなので不要)
     # - stylecheck # スタイルチェック (gocriticと重複する場合ありなので不要)
     # - typecheck # 型チェック (ビルドで通常検出可能なので不要)
@@ -22,6 +31,17 @@ linters:
     govet:
       enable:
         - shadow
+    gosec:
+      includes:
+        - G101
+        - G103
+        - G104
+        - G106
+    gocyclo:
+      min-complexity: 15
+    goimports:
+      local-prefixes:
+        - gin-clean-starter
   exclusions:
     presets:
       - comments
@@ -37,6 +57,7 @@ linters:
       - builtin$
       - examples$
       - docs
+      - internal/infra/sqlc
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
@@ -44,13 +65,10 @@ formatters:
   enable:
     - gofmt
     - goimports
-  settings:
-    goimports:
-      local-prefixes:
-        - inquiry_pro_go_back
   exclusions:
     paths:
       - third_party$
       - builtin$
       - examples$
       - docs
+      - internal/infra/sqlc

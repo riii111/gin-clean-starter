@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"gin-clean-starter/cmd/bootstrap"
-	"gin-clean-starter/internal/handler/middleware"
 	"gin-clean-starter/internal/pkg/config"
 
 	"github.com/gin-gonic/gin"
@@ -54,10 +53,6 @@ func main() {
 	app := fx.New(
 		bootstrap.Module,
 		fx.Provide(
-			func(cfg config.Config) *slog.Logger {
-				logger := middleware.NewLogger(cfg.Log)
-				return logger.GetSlogLogger()
-			},
 			func() *gin.Engine {
 				return gin.New()
 			},

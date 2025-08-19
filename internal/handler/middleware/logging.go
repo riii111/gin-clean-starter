@@ -10,10 +10,64 @@ import (
 	"strings"
 	"time"
 
+	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/pkg/config"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
+
+type Logger struct {
+	logger   *slog.Logger
+	cfg      config.LogConfig
+	timezone *time.Location
+}
+
+func NewLogger(cfg config.LogConfig) *Logger {
+	var logLevel slog.Level
+	switch strings.ToLower(cfg.Level) {
+	case "debug":
+		logLevel = slog.LevelDebug
+	case "info":
+		logLevel = slog.LevelInfo
+	case "warn":
+		logLevel = slog.LevelWarn
+	case "error":
+		logLevel = slog.LevelError
+	default:
+		logLevel = slog.LevelInfo
+	}
+
+	timezone := time.FixedZone(cfg.TimeZone, cfg.TimeZoneOffset)
+
+	opts := &slog.HandlerOptions{
+		Level: logLevel,
+		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
+			if a.Key == slog.TimeKey {
+				if t, ok := a.Value.Any().(time.Time); ok {
+					a.Value = slog.StringValue(t.In(timezone).Format(cfg.TimeFormat))
+				}
+			}
+			return a
+		},
+	}
+
+	var handler slog.Handler
+	if gin.Mode() == gin.ReleaseMode {
+		handler = slog.NewJSONHandler(os.Stdout, opts)
+	} else {
+		handler = slog.NewTextHandler(os.Stdout, opts)
+	}
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+
+	return &Logger{
+		logger:   logger,
+		cfg:      cfg,
+		timezone: timezone,
+	}
+}
 
 func (l *Logger) LoggingMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -75,52 +129,6 @@ func (l *Logger) LoggingMiddleware() gin.HandlerFunc {
 	}
 }
 
-func NewLogger(cfg config.LogConfig) *Logger {
-	var logLevel slog.Level
-	switch strings.ToLower(cfg.Level) {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "info":
-		logLevel = slog.LevelInfo
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		logLevel = slog.LevelInfo
-	}
-
-	timezone := time.FixedZone(cfg.TimeZone, cfg.TimeZoneOffset)
-
-	opts := &slog.HandlerOptions{
-		Level: logLevel,
-		ReplaceAttr: func(_ []string, a slog.Attr) slog.Attr {
-			if a.Key == slog.TimeKey {
-				if t, ok := a.Value.Any().(time.Time); ok {
-					a.Value = slog.StringValue(t.In(timezone).Format(cfg.TimeFormat))
-				}
-			}
-			return a
-		},
-	}
-
-	var handler slog.Handler
-	if gin.Mode() == gin.ReleaseMode {
-		handler = slog.NewJSONHandler(os.Stdout, opts)
-	} else {
-		handler = slog.NewTextHandler(os.Stdout, opts)
-	}
-
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
-
-	return &Logger{
-		logger:   logger,
-		cfg:      cfg,
-		timezone: timezone,
-	}
-}
-
 func (l *Logger) GetSlogLogger() *slog.Logger {
 	return l.logger
 }
@@ -152,6 +160,7 @@ func (l *Logger) generateRequestID() string {
 }
 
 func extractUserContext(c *gin.Context) (userID, role string) {
+	// Prefer structured claims if present.
 	if claims, exists := c.Get("jwt_claims"); exists {
 		if claimsMap, ok := claims.(map[string]any); ok {
 			if uid, ok := claimsMap["user_id"].(string); ok {
@@ -163,18 +172,34 @@ func extractUserContext(c *gin.Context) (userID, role string) {
 		}
 	}
 
+	// Fallback to explicit context keys set by AuthMiddleware.
+	if userID == "" {
+		if v, ok := c.Get("user_id"); ok {
+			switch vv := v.(type) {
+			case uuid.UUID:
+				userID = vv.String()
+			case string:
+				userID = vv
+			}
+		}
+	}
+	if role == "" {
+		if v, ok := c.Get("user_role"); ok {
+			switch vv := v.(type) {
+			case user.Role:
+				role = string(vv)
+			case string:
+				role = vv
+			}
+		}
+	}
+
+	// Final fallback to headers (e.g., when proxied).
 	if userID == "" {
 		userID = c.GetHeader("X-User-ID")
 	}
 	if role == "" {
 		role = c.GetHeader("X-User-Role")
 	}
-
 	return
-}
-
-type Logger struct {
-	logger   *slog.Logger
-	cfg      config.LogConfig
-	timezone *time.Location
 }
