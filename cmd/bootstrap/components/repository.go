@@ -17,6 +17,26 @@ var RepositoryModule = fx.Module("repository",
 			repo_impl.NewUserRepository,
 			fx.As(new(usecase.UserRepository)),
 		),
+		fx.Annotate(
+			repo_impl.NewReservationRepository,
+			fx.As(new(usecase.ReservationRepository)),
+		),
+		fx.Annotate(
+			repo_impl.NewResourceRepository,
+			fx.As(new(usecase.ResourceRepository)),
+		),
+		fx.Annotate(
+			repo_impl.NewCouponRepository,
+			fx.As(new(usecase.CouponRepository)),
+		),
+		fx.Annotate(
+			repo_impl.NewIdempotencyRepository,
+			fx.As(new(usecase.IdempotencyRepository)),
+		),
+		fx.Annotate(
+			repo_impl.NewNotificationRepository,
+			fx.As(new(usecase.NotificationRepository)),
+		),
 	),
 )
 

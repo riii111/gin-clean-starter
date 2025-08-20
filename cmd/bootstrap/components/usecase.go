@@ -9,5 +9,6 @@ import (
 var UseCaseModule = fx.Module("usecase",
 	fx.Provide(
 		usecase.NewAuthUseCase,
+		usecase.NewReservationUseCase,
 	),
 )
