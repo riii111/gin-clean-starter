@@ -44,8 +44,17 @@ func (r CreateReservationRequest) ToDomain(
 		return nil, err
 	}
 
-	// Price calculation will be done in usecase layer
-	price := reservation.NewMoney(0) // Temporary, will be calculated in usecase
+	// Calculate price in usecase layer
+	duration := timeSlot.Duration()
+	hours := duration.Hours()
+	basePriceCents := int64(hours * 1000 * 100) // 1000円/時間
+
+	// Apply coupon discount if available
+	if couponEntity != nil {
+		basePriceCents = couponEntity.ApplyDiscount(basePriceCents)
+	}
+
+	price := reservation.NewMoney(basePriceCents)
 
 	note := reservation.NewNote("")
 	if r.Note != nil {

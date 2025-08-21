@@ -12,6 +12,7 @@ import (
 	"gin-clean-starter/internal/domain/coupon"
 	"gin-clean-starter/internal/domain/reservation"
 	"gin-clean-starter/internal/domain/resource"
+	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/internal/pkg/errs"
@@ -62,17 +63,8 @@ type NotificationRepository interface {
 	CreateJob(ctx context.Context, tx sqlc.DBTX, kind string, payload []byte, runAt time.Time) error
 }
 
-type CreateReservationParams struct {
-	ResourceID uuid.UUID `json:"resource_id"`
-	UserID     uuid.UUID `json:"user_id"`
-	StartTime  time.Time `json:"start_time"`
-	EndTime    time.Time `json:"end_time"`
-	CouponCode *string   `json:"coupon_code,omitempty"`
-	Note       *string   `json:"note,omitempty"`
-}
-
 type ReservationUseCase interface {
-	CreateReservation(ctx context.Context, params CreateReservationParams, idempotencyKey uuid.UUID) (*readmodel.ReservationRM, error)
+	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*readmodel.ReservationRM, error)
 	GetReservation(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error)
 	GetUserReservations(ctx context.Context, userID uuid.UUID) ([]*readmodel.ReservationListRM, error)
 }
@@ -106,39 +98,41 @@ func NewReservationUseCase(
 
 func (r *reservationUseCaseImpl) CreateReservation(
 	ctx context.Context,
-	params CreateReservationParams,
+	req reqdto.CreateReservationRequest,
+	userID uuid.UUID,
 	idempotencyKey uuid.UUID,
 ) (*readmodel.ReservationRM, error) {
-	if err := r.checkIdempotency(ctx, params, idempotencyKey); err != nil {
+	if err := r.checkIdempotency(ctx, req, userID, idempotencyKey); err != nil {
 		return nil, err
 	}
 
-	resourceEntity, err := r.validateAndGetResource(ctx, params.ResourceID)
+	resourceEntity, err := r.validateAndGetResource(ctx, req.ResourceID)
 	if err != nil {
 		return nil, err
 	}
 
-	couponEntity, err := r.validateAndGetCoupon(ctx, params.CouponCode)
+	couponEntity, err := r.validateAndGetCoupon(ctx, req.GetCouponCode())
 	if err != nil {
 		return nil, err
 	}
 
-	reservationEntity, err := r.createReservationEntity(params, resourceEntity, couponEntity)
+	reservationEntity, err := req.ToDomain(userID, resourceEntity, couponEntity)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
 
-	return r.executeReservationTransaction(ctx, reservationEntity, idempotencyKey, params.UserID, params)
+	return r.executeReservationTransaction(ctx, reservationEntity, idempotencyKey, userID, req)
 }
 
 func (r *reservationUseCaseImpl) checkIdempotency(
 	ctx context.Context,
-	params CreateReservationParams,
+	req reqdto.CreateReservationRequest,
+	userID uuid.UUID,
 	idempotencyKey uuid.UUID,
 ) error {
-	requestHash := r.calculateRequestHash(params)
+	requestHash := r.calculateRequestHash(req)
 
-	existing, err := r.idempotencyRepo.Get(ctx, idempotencyKey, params.UserID)
+	existing, err := r.idempotencyRepo.Get(ctx, idempotencyKey, userID)
 	if err != nil && !infra.IsKind(err, infra.KindNotFound) {
 		return errs.Mark(err, ErrIdempotencyCheckFailed)
 	}
@@ -210,7 +204,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 	ctx context.Context,
 	reservationEntity *reservation.Reservation,
 	idempotencyKey, userID uuid.UUID,
-	params CreateReservationParams,
+	req reqdto.CreateReservationRequest,
 ) (*readmodel.ReservationRM, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -222,7 +216,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 		}
 	}()
 
-	requestHash := r.calculateRequestHash(params)
+	requestHash := r.calculateRequestHash(req)
 	expiresAt := time.Now().Add(24 * time.Hour)
 	err = r.idempotencyRepo.Create(ctx, tx, idempotencyKey, userID, "POST /reservations", requestHash, expiresAt)
 	if err != nil {
@@ -290,8 +284,8 @@ func (r *reservationUseCaseImpl) GetUserReservations(ctx context.Context, userID
 	return reservations, nil
 }
 
-func (r *reservationUseCaseImpl) calculateRequestHash(params CreateReservationParams) string {
-	data, _ := json.Marshal(params)
+func (r *reservationUseCaseImpl) calculateRequestHash(req reqdto.CreateReservationRequest) string {
+	data, _ := json.Marshal(req)
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }

@@ -48,15 +48,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	credentials, err := req.ToDomain()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request data",
-		})
-		return
-	}
-
-	pair, user, err := h.authUseCase.Login(c.Request.Context(), credentials)
+	pair, user, err := h.authUseCase.Login(c.Request.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrInvalidCredentials):

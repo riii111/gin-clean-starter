@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"gin-clean-starter/internal/domain/user"
+	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/pkg/password"
 	"gin-clean-starter/internal/usecase/readmodel"
@@ -34,7 +35,7 @@ type TokenPair struct {
 }
 
 type AuthUseCase interface {
-	Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error)
+	Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *readmodel.AuthorizedUserRM, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
 	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error)
 	ValidateToken(tokenString string) (uuid.UUID, user.Role, error)
@@ -52,7 +53,12 @@ func NewAuthUseCase(userRepo UserRepository, jwtService *jwt.Service) AuthUseCas
 	}
 }
 
-func (a *authUseCaseImpl) Login(ctx context.Context, credentials user.Credentials) (*TokenPair, *readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *readmodel.AuthorizedUserRM, error) {
+	credentials, err := req.ToDomain()
+	if err != nil {
+		return nil, nil, ErrAuthenticationFailed
+	}
+
 	userReadModel, err := a.validateUser(ctx, credentials)
 	if err != nil {
 		return nil, nil, err

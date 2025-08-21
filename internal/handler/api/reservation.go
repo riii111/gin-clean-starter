@@ -64,16 +64,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 		return
 	}
 
-	params := usecase.CreateReservationParams{
-		ResourceID: req.ResourceID,
-		UserID:     userID,
-		StartTime:  req.StartTime,
-		EndTime:    req.EndTime,
-		CouponCode: req.GetCouponCode(),
-		Note:       req.Note,
-	}
-
-	reservationRM, err := h.reservationUseCase.CreateReservation(c.Request.Context(), params, idempotencyKey)
+	reservationRM, err := h.reservationUseCase.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrResourceNotFound):
