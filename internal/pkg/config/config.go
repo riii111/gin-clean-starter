@@ -37,7 +37,7 @@ type DBConfig struct {
 }
 
 type CORSConfig struct {
-	AllowOrigins     []string      `envconfig:"CORS_ALLOW_ORIGINS" default:"http://localhost:3000,http://localhost:8080"`
+	AllowOrigins     []string      `envconfig:"CORS_ALLOW_ORIGINS" required:"true"`
 	AllowMethods     []string      `envconfig:"CORS_ALLOW_METHODS" default:"GET,POST,PUT,PATCH,DELETE,OPTIONS"`
 	AllowHeaders     []string      `envconfig:"CORS_ALLOW_HEADERS" default:"Origin,Content-Type,Accept,Authorization"`
 	ExposeHeaders    []string      `envconfig:"CORS_EXPOSE_HEADERS" default:"Content-Length"`
@@ -105,6 +105,9 @@ func NewTestConfig() Config {
 			Secret:               "test-jwt-secret-key",
 			AccessTokenDuration:  "15m",
 			RefreshTokenDuration: "168h",
+		},
+		CORS: CORSConfig{
+			AllowOrigins: []string{"http://localhost:3000", "http://localhost:8080"},
 		},
 		Cookie: CookieConfig{
 			Secure:    false,

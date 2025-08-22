@@ -1,15 +1,16 @@
 package user
 
 import (
-	"errors"
 	"regexp"
 	"strings"
+
+	"gin-clean-starter/internal/pkg/errs"
 )
 
 var (
-	ErrInvalidEmail    = errors.New("invalid email format")
-	ErrInvalidRole     = errors.New("invalid role")
-	ErrPasswordTooWeak = errors.New("password must be at least 8 characters long")
+	ErrInvalidEmail    = errs.New("invalid email format")
+	ErrInvalidRole     = errs.New("invalid role")
+	ErrPasswordTooWeak = errs.New("password must be at least 8 characters long")
 )
 
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)

@@ -25,9 +25,11 @@ func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandl
 }
 
 func setupMiddleware(engine *gin.Engine, cfg config.Config) {
+	// Recovery must be first (outermost) to catch panics from all other middleware
+	engine.Use(middleware.CustomRecovery())
 	engine.Use(middleware.NewCORSMiddleware(cfg.CORS))
 	engine.Use(middleware.LoggingMiddleware(nil, cfg.Log))
-	engine.Use(gin.Recovery())
+	engine.Use(middleware.ErrorHandler())
 }
 
 func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, authMiddleware *middleware.AuthMiddleware) {

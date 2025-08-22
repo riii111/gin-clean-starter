@@ -18,6 +18,6 @@ func NewCORSMiddleware(cfg config.CORSConfig) gin.HandlerFunc {
 		AllowCredentials: cfg.AllowCredentials,
 		MaxAge:           cfg.MaxAge,
 	}
-	slog.Info("CORSミドルウェアを初期化しました", "AllowOrigins", cfg.AllowOrigins)
+	slog.Info("CORS middleware initialized", "AllowOrigins", cfg.AllowOrigins)
 	return cors.New(corsCfg)
 }

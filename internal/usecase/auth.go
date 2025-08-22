@@ -2,11 +2,11 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 
 	"gin-clean-starter/internal/domain/user"
 	reqdto "gin-clean-starter/internal/handler/dto/request"
+	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/pkg/password"
 	"gin-clean-starter/internal/usecase/readmodel"
@@ -15,12 +15,12 @@ import (
 )
 
 var (
-	ErrUserNotFound         = errors.New("user not found")
-	ErrInvalidCredentials   = errors.New("invalid email or password")
-	ErrUserInactive         = errors.New("user account is inactive")
-	ErrAuthenticationFailed = errors.New("authentication failed")
-	ErrTokenGeneration      = errors.New("token generation failed")
-	ErrTokenValidation      = errors.New("token validation failed")
+	ErrUserNotFound         = errs.New("user not found")
+	ErrInvalidCredentials   = errs.New("invalid email or password")
+	ErrUserInactive         = errs.New("user account is inactive")
+	ErrAuthenticationFailed = errs.New("authentication failed")
+	ErrTokenGeneration      = errs.New("token generation failed")
+	ErrTokenValidation      = errs.New("token validation failed")
 )
 
 type UserRepository interface {
@@ -66,17 +66,17 @@ func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*
 
 	role, err := user.NewRole(userReadModel.Role)
 	if err != nil {
-		return nil, nil, ErrAuthenticationFailed
+		return nil, nil, errs.Mark(err, ErrAuthenticationFailed)
 	}
 
 	accessToken, err := a.jwtService.GenerateAccessToken(userReadModel.ID, role)
 	if err != nil {
-		return nil, nil, ErrTokenGeneration
+		return nil, nil, errs.Mark(err, ErrTokenGeneration)
 	}
 
 	refreshToken, err := a.jwtService.GenerateRefreshToken(userReadModel.ID, role)
 	if err != nil {
-		return nil, nil, ErrTokenGeneration
+		return nil, nil, errs.Mark(err, ErrTokenGeneration)
 	}
 
 	err = a.userRepo.UpdateLastLogin(ctx, userReadModel.ID)
@@ -95,7 +95,7 @@ func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*
 func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error) {
 	claims, err := a.jwtService.ValidateToken(refreshToken)
 	if err != nil {
-		return nil, ErrTokenValidation
+		return nil, errs.Mark(err, ErrTokenValidation)
 	}
 
 	if claims.TokenType != jwt.TokenTypeRefresh {
@@ -104,11 +104,14 @@ func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string)
 
 	role, err := user.NewRole(claims.Role)
 	if err != nil {
-		return nil, ErrTokenValidation
+		return nil, errs.Mark(err, ErrTokenValidation)
 	}
 
 	userReadModel, err := a.userRepo.FindByID(ctx, claims.UserID)
 	if err != nil || userReadModel == nil {
+		if err != nil {
+			return nil, errs.Mark(err, ErrUserNotFound)
+		}
 		return nil, ErrUserNotFound
 	}
 
@@ -118,12 +121,12 @@ func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string)
 
 	accessToken, err := a.jwtService.GenerateAccessToken(claims.UserID, role)
 	if err != nil {
-		return nil, ErrTokenGeneration
+		return nil, errs.Mark(err, ErrTokenGeneration)
 	}
 
 	newRefreshToken, err := a.jwtService.GenerateRefreshToken(claims.UserID, role)
 	if err != nil {
-		return nil, ErrTokenGeneration
+		return nil, errs.Mark(err, ErrTokenGeneration)
 	}
 
 	return &TokenPair{
@@ -136,7 +139,7 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 	userReadModel, hashedPassword, err := a.userRepo.FindByEmail(ctx, credentials.Email())
 	if err != nil {
 		// Return same error as password mismatch to prevent user enumeration attacks
-		return nil, ErrInvalidCredentials
+		return nil, errs.Mark(err, ErrInvalidCredentials)
 	}
 
 	if userReadModel == nil || !userReadModel.IsActive {
@@ -145,7 +148,7 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 
 	err = password.ComparePassword(hashedPassword, credentials.Password().Value())
 	if err != nil {
-		return nil, ErrInvalidCredentials
+		return nil, errs.Mark(err, ErrInvalidCredentials)
 	}
 
 	return userReadModel, nil
@@ -154,6 +157,9 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
 	user, err := a.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
+		if err != nil {
+			return nil, errs.Mark(err, ErrUserNotFound)
+		}
 		return nil, ErrUserNotFound
 	}
 
@@ -167,12 +173,15 @@ func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 func (a *authUseCaseImpl) ValidateToken(tokenString string) (uuid.UUID, user.Role, error) {
 	claims, err := a.jwtService.ValidateToken(tokenString)
 	if err != nil || claims.TokenType != jwt.TokenTypeAccess {
+		if err != nil {
+			return uuid.Nil, "", errs.Mark(err, ErrTokenValidation)
+		}
 		return uuid.Nil, "", ErrTokenValidation
 	}
 
 	role, err := user.NewRole(claims.Role)
 	if err != nil {
-		return uuid.Nil, "", ErrTokenValidation
+		return uuid.Nil, "", errs.Mark(err, ErrTokenValidation)
 	}
 
 	return claims.UserID, role, nil
