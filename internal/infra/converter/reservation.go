@@ -1,6 +1,9 @@
 package converter
 
 import (
+	"fmt"
+	"time"
+
 	"gin-clean-starter/internal/domain/reservation"
 	"gin-clean-starter/internal/infra/sqlc"
 
@@ -8,10 +11,13 @@ import (
 )
 
 func ReservationToInfra(res *reservation.Reservation) sqlc.CreateReservationParams {
+	timeSlot := res.TimeSlot()
+	tstzrange := fmt.Sprintf("[%s,%s)", timeSlot.Start().Format(time.RFC3339), timeSlot.End().Format(time.RFC3339))
+
 	params := sqlc.CreateReservationParams{
 		ResourceID: res.ResourceID(),
 		UserID:     res.UserID(),
-		Slot:       res.TimeSlot().ToTstzrange(),
+		Slot:       tstzrange,
 		Status:     res.Status().String(),
 		PriceCents: int32(res.Price().Cents()),
 	}
