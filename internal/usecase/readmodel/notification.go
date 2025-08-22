@@ -9,6 +9,7 @@ import (
 type NotificationJobRM struct {
 	ID        uuid.UUID `json:"id"`
 	Kind      string    `json:"kind"`
+	Topic     string    `json:"topic"`
 	Payload   []byte    `json:"payload"`
 	RunAt     time.Time `json:"run_at"`
 	Attempts  int32     `json:"attempts"`

@@ -34,15 +34,16 @@ type IdempotencyKeys struct {
 	RequestHash         string             `json:"request_hash"`
 	ResponseBodyHash    pgtype.Text        `json:"response_body_hash"`
 	Status              string             `json:"status"`
+	ResultReservationID pgtype.UUID        `json:"result_reservation_id"`
 	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	ResultReservationID pgtype.UUID        `json:"result_reservation_id"`
 }
 
 type NotificationJobs struct {
 	ID        uuid.UUID          `json:"id"`
 	Kind      string             `json:"kind"`
+	Topic     string             `json:"topic"`
 	Payload   []byte             `json:"payload"`
 	RunAt     pgtype.Timestamptz `json:"run_at"`
 	Attempts  int32              `json:"attempts"`

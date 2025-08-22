@@ -66,6 +66,8 @@ func classifyPgErr(err error) RepositoryErrorKind {
 			return KindDuplicateKey
 		case "23503": // foreign_key_violation
 			return KindForeignKeyViolated
+		case "23P01": // exclusion_violation (e.g., EXCLUDE constraints like tstzrange overlap)
+			return KindConflict
 		default:
 			return KindDBFailure
 		}

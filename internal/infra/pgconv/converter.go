@@ -1,10 +1,12 @@
 package pgconv
 
 import (
+	"database/sql"
 	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -86,4 +88,9 @@ func StringPtrToPgtype(s *string) pgtype.Text {
 
 func TimeToPgtype(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
+// IsNoRows checks if the error is a "no rows" error from either sql or pgx
+func IsNoRows(err error) bool {
+	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows)
 }

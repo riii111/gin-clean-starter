@@ -2,9 +2,6 @@ package repo_impl
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"strings"
 
 	"gin-clean-starter/internal/domain/reservation"
 	"gin-clean-starter/internal/infra"
@@ -40,9 +37,6 @@ func (r *ReservationRepository) Create(ctx context.Context, tx sqlc.DBTX, res *r
 
 	result, err := r.queries.CreateReservation(ctx, tx, params)
 	if err != nil {
-		if strings.Contains(err.Error(), "reservations_no_overlap") {
-			return nil, infra.WrapRepoErr("time slot conflict", err, infra.KindConflict)
-		}
 		return nil, infra.WrapRepoErr("failed to create reservation", err)
 	}
 
@@ -57,7 +51,7 @@ func (r *ReservationRepository) Create(ctx context.Context, tx sqlc.DBTX, res *r
 func (r *ReservationRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error) {
 	row, err := r.queries.GetReservationByID(ctx, r.db, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("reservation not found", err, infra.KindNotFound)
 		}
 		return nil, infra.WrapRepoErr("failed to find reservation by ID", err)
@@ -75,6 +69,34 @@ func (r *ReservationRepository) FindByUserID(ctx context.Context, userID uuid.UU
 	result := make([]*readmodel.ReservationListRM, len(rows))
 	for i, row := range rows {
 		result[i] = toReservationListRMFromUserRow(row)
+	}
+
+	return result, nil
+}
+
+func (r *ReservationRepository) FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*readmodel.ReservationListRM, error) {
+	params := sqlc.GetReservationsByUserIDPaginatedParams{
+		UserID: userID,
+		Limit:  limit,
+		Offset: offset,
+	}
+
+	rows, err := r.queries.GetReservationsByUserIDPaginated(ctx, r.db, params)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to find reservations by user ID with pagination", err)
+	}
+
+	result := make([]*readmodel.ReservationListRM, len(rows))
+	for i, row := range rows {
+		result[i] = &readmodel.ReservationListRM{
+			ID:           row.ID,
+			ResourceID:   row.ResourceID,
+			ResourceName: row.ResourceName,
+			Slot:         row.Slot,
+			Status:       row.Status,
+			PriceCents:   row.PriceCents,
+			CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
+		}
 	}
 
 	return result, nil

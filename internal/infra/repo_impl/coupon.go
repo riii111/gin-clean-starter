@@ -2,8 +2,6 @@ package repo_impl
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/pgconv"
@@ -33,7 +31,7 @@ func NewCouponRepository(queries *sqlc.Queries, db sqlc.DBTX) *CouponRepository 
 func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*readmodel.CouponRM, error) {
 	row, err := r.queries.GetCouponByCode(ctx, r.db, code)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("coupon not found", err, infra.KindNotFound)
 		}
 		return nil, infra.WrapRepoErr("failed to find coupon by code", err)
@@ -49,7 +47,7 @@ func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*readmo
 func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.CouponRM, error) {
 	row, err := r.queries.GetCouponByID(ctx, r.db, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("coupon not found", err, infra.KindNotFound)
 		}
 		return nil, infra.WrapRepoErr("failed to find coupon by ID", err)

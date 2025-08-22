@@ -46,22 +46,9 @@ type GetIdempotencyKeyParams struct {
 	UserID uuid.UUID `json:"user_id"`
 }
 
-type GetIdempotencyKeyRow struct {
-	Key                 uuid.UUID          `json:"key"`
-	UserID              uuid.UUID          `json:"user_id"`
-	Endpoint            string             `json:"endpoint"`
-	RequestHash         string             `json:"request_hash"`
-	ResponseBodyHash    pgtype.Text        `json:"response_body_hash"`
-	Status              string             `json:"status"`
-	ResultReservationID pgtype.UUID        `json:"result_reservation_id"`
-	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt           pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempotencyKeyParams) (GetIdempotencyKeyRow, error) {
+func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempotencyKeyParams) (IdempotencyKeys, error) {
 	row := db.QueryRow(ctx, getIdempotencyKey, arg.Key, arg.UserID)
-	var i GetIdempotencyKeyRow
+	var i IdempotencyKeys
 	err := row.Scan(
 		&i.Key,
 		&i.UserID,

@@ -30,9 +30,10 @@ func NewNotificationRepository(queries *sqlc.Queries, db sqlc.DBTX) *Notificatio
 	}
 }
 
-func (r *NotificationRepository) CreateJob(ctx context.Context, tx sqlc.DBTX, kind string, payload []byte, runAt time.Time) error {
+func (r *NotificationRepository) CreateJob(ctx context.Context, tx sqlc.DBTX, kind, topic string, payload []byte, runAt time.Time) error {
 	params := sqlc.CreateNotificationJobParams{
 		Kind:    kind,
+		Topic:   topic,
 		Payload: payload,
 		RunAt:   pgtype.Timestamptz{Time: runAt, Valid: true},
 		Status:  "queued",
@@ -84,6 +85,7 @@ func toNotificationJobRMFromRow(row sqlc.NotificationJobs) *readmodel.Notificati
 	rm := &readmodel.NotificationJobRM{
 		ID:        row.ID,
 		Kind:      row.Kind,
+		Topic:     row.Topic,
 		Payload:   row.Payload,
 		RunAt:     row.RunAt.Time,
 		Attempts:  row.Attempts,

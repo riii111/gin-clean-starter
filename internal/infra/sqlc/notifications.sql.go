@@ -15,16 +15,18 @@ import (
 const createNotificationJob = `-- name: CreateNotificationJob :exec
 INSERT INTO notification_jobs (
     kind,
+    topic,
     payload,
     run_at,
     status
 ) VALUES (
-    $1, $2, $3, $4
+    $1, $2, $3, $4, $5
 )
 `
 
 type CreateNotificationJobParams struct {
 	Kind    string             `json:"kind"`
+	Topic   string             `json:"topic"`
 	Payload []byte             `json:"payload"`
 	RunAt   pgtype.Timestamptz `json:"run_at"`
 	Status  string             `json:"status"`
@@ -33,6 +35,7 @@ type CreateNotificationJobParams struct {
 func (q *Queries) CreateNotificationJob(ctx context.Context, db DBTX, arg CreateNotificationJobParams) error {
 	_, err := db.Exec(ctx, createNotificationJob,
 		arg.Kind,
+		arg.Topic,
 		arg.Payload,
 		arg.RunAt,
 		arg.Status,
@@ -44,6 +47,7 @@ const getPendingNotificationJobs = `-- name: GetPendingNotificationJobs :many
 SELECT 
     id,
     kind,
+    topic,
     payload,
     run_at,
     attempts,
@@ -70,6 +74,7 @@ func (q *Queries) GetPendingNotificationJobs(ctx context.Context, db DBTX, limit
 		if err := rows.Scan(
 			&i.ID,
 			&i.Kind,
+			&i.Topic,
 			&i.Payload,
 			&i.RunAt,
 			&i.Attempts,

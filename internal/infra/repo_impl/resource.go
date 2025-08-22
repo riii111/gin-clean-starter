@@ -2,10 +2,9 @@ package repo_impl
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 
 	"gin-clean-starter/internal/infra"
+	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/internal/usecase/readmodel"
 
@@ -48,7 +47,7 @@ func (r *ResourceRepository) FindAll(ctx context.Context) ([]*readmodel.Resource
 func (r *ResourceRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.ResourceRM, error) {
 	row, err := r.queries.GetResourceByID(ctx, r.db, id)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("resource not found", err, infra.KindNotFound)
 		}
 		return nil, infra.WrapRepoErr("failed to find resource by ID", err)

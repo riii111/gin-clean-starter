@@ -2,8 +2,6 @@ package repo_impl
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"time"
 
 	"gin-clean-starter/internal/infra"
@@ -16,7 +14,7 @@ import (
 
 type IdempotencyQueries interface {
 	TryInsertIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.TryInsertIdempotencyKeyParams) error
-	GetIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.GetIdempotencyKeyParams) (sqlc.GetIdempotencyKeyRow, error)
+	GetIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.GetIdempotencyKeyParams) (sqlc.IdempotencyKeys, error)
 	UpdateIdempotencyKeyCompleted(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateIdempotencyKeyCompletedParams) error
 	DeleteExpiredIdempotencyKeys(ctx context.Context, db sqlc.DBTX) (int64, error)
 }
@@ -58,13 +56,20 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID u
 
 	row, err := r.queries.GetIdempotencyKey(ctx, r.db, params)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
+		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("idempotency key not found", err, infra.KindNotFound)
 		}
 		return nil, infra.WrapRepoErr("failed to get idempotency key", err)
 	}
 
-	return toIdempotencyKeyRMFromRow(row), nil
+	rm := toIdempotencyKeyRMFromRow(row)
+
+	// Check if key has expired (treat as not found)
+	if time.Now().After(rm.ExpiresAt) {
+		return nil, infra.WrapRepoErr("idempotency key expired", nil, infra.KindNotFound)
+	}
+
+	return rm, nil
 }
 
 func (r *IdempotencyRepository) UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error {
@@ -92,7 +97,7 @@ func (r *IdempotencyRepository) DeleteExpired(ctx context.Context) (int64, error
 	return count, nil
 }
 
-func toIdempotencyKeyRMFromRow(row sqlc.GetIdempotencyKeyRow) *readmodel.IdempotencyKeyRM {
+func toIdempotencyKeyRMFromRow(row sqlc.IdempotencyKeys) *readmodel.IdempotencyKeyRM {
 	rm := &readmodel.IdempotencyKeyRM{
 		Key:                 row.Key,
 		UserID:              row.UserID,

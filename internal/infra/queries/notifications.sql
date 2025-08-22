@@ -1,17 +1,19 @@
 -- name: CreateNotificationJob :exec
 INSERT INTO notification_jobs (
     kind,
+    topic,
     payload,
     run_at,
     status
 ) VALUES (
-    $1, $2, $3, $4
+    $1, $2, $3, $4, $5
 );
 
 -- name: GetPendingNotificationJobs :many
 SELECT 
     id,
     kind,
+    topic,
     payload,
     run_at,
     attempts,
