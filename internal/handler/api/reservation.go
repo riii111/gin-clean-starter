@@ -2,11 +2,13 @@ package api
 
 import (
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
-	"strings"
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
 	"gin-clean-starter/internal/usecase"
 
@@ -42,77 +44,85 @@ func NewReservationHandler(reservationUseCase usecase.ReservationUseCase) *Reser
 func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Internal server error",
-		})
+		slog.Error("Failed to get user ID from context")
+		httperr.AbortWithError(c, http.StatusInternalServerError,
+			errors.New("user context missing"), httperr.TypeInternal,
+			"Internal server error", nil)
 		return
 	}
 
 	idempotencyKey, err := h.getIdempotencyKey(c)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
-		})
+		slog.Warn("Invalid idempotency key", "error", err)
+		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+			err.Error(), nil)
 		return
 	}
 
 	var req reqdto.CreateReservationRequest
 	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request format",
-		})
+		slog.Warn("Invalid request format in create reservation", "error", bindErr)
+		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, httperr.TypeValidation,
+			"Invalid request format", nil)
 		return
 	}
 
-	reservationRM, err := h.reservationUseCase.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
+	result, err := h.reservationUseCase.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrResourceNotFound):
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Resource not found",
-			})
+			slog.Warn("Resource not found", "resource_id", req.ResourceID, "error", err)
+			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+				"Resource not found", nil)
 		case errors.Is(err, usecase.ErrCouponNotFound):
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Coupon not found",
-			})
+			slog.Warn("Coupon not found", "coupon_code", req.GetCouponCode(), "error", err)
+			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+				"Coupon not found", nil)
 		case errors.Is(err, usecase.ErrInvalidTimeSlot):
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid time slot",
-			})
+			slog.Warn("Invalid time slot", "start_time", req.StartTime, "end_time", req.EndTime, "error", err)
+			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+				"Invalid time slot", nil)
 		case errors.Is(err, usecase.ErrInsufficientLeadTime):
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Insufficient lead time for reservation",
-			})
+			slog.Warn("Insufficient lead time", "start_time", req.StartTime, "error", err)
+			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+				"Insufficient lead time for reservation", nil)
 		case errors.Is(err, usecase.ErrInvalidCoupon):
-			c.JSON(http.StatusBadRequest, gin.H{
-				"error": "Invalid or expired coupon",
-			})
+			slog.Warn("Invalid or expired coupon", "coupon_code", req.GetCouponCode(), "error", err)
+			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+				"Invalid or expired coupon", nil)
 		case errors.Is(err, usecase.ErrDuplicateReservation):
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "Duplicate reservation request with different parameters",
-			})
+			slog.Warn("Duplicate reservation request", "idempotency_key", idempotencyKey, "error", err)
+			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
+				"Duplicate reservation request with different parameters", nil)
 		case errors.Is(err, usecase.ErrReservationConflict):
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "Time slot is already reserved",
-			})
-		case strings.Contains(err.Error(), "reservation in progress"):
-			c.JSON(http.StatusConflict, gin.H{
-				"error": "Reservation request is currently being processed",
-			})
-		case strings.Contains(err.Error(), "domain validation failed"):
-			c.JSON(http.StatusUnprocessableEntity, gin.H{
-				"error": "Domain validation failed",
-			})
+			slog.Warn("Time slot conflict", "resource_id", req.ResourceID, "start_time", req.StartTime, "error", err)
+			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
+				"Time slot is already reserved", nil)
+		case errors.Is(err, usecase.ErrIdempotencyInProgress):
+			slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
+			httperr.AbortWithError(c, http.StatusAccepted, err, httperr.TypeConflict,
+				"Reservation request is currently being processed", map[string]string{"retry_after": "2"})
+		case errors.Is(err, usecase.ErrDomainValidation):
+			slog.Warn("Domain validation failed", "user_id", userID, "error", err)
+			httperr.AbortWithError(c, http.StatusUnprocessableEntity, err, httperr.TypeValidation,
+				"Domain validation failed", nil)
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Internal server error",
-			})
+			slog.Error("Unexpected error in create reservation", "error", err)
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+				"Internal server error", nil)
 		}
 		return
 	}
 
-	response := resdto.FromReservationRM(reservationRM)
-	c.JSON(http.StatusCreated, response)
+	response := resdto.FromReservationRM(result.ReservationRM)
+
+	c.Header("Location", "/reservations/"+result.ReservationRM.ID.String())
+	if result.IsReplayed {
+		c.Header("Idempotent-Replayed", "true")
+		c.JSON(http.StatusOK, response)
+	} else {
+		c.JSON(http.StatusCreated, response)
+	}
 }
 
 // @Summary Get reservation
@@ -130,9 +140,9 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := uuid.Parse(idStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid reservation ID format",
-		})
+		slog.Warn("Invalid reservation ID format", "id", idStr, "error", err)
+		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+			"Invalid reservation ID format", nil)
 		return
 	}
 
@@ -140,17 +150,24 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrReservationNotFound):
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "Reservation not found",
-			})
+			slog.Info("Reservation not found", "id", id)
+			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+				"Reservation not found", nil)
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Internal server error",
-			})
+			slog.Error("Unexpected error in get reservation", "id", id, "error", err)
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+				"Internal server error", nil)
 		}
 		return
 	}
 
+	etag := fmt.Sprintf(`W/"%s-%d"`, reservationRM.ID, reservationRM.UpdatedAt.UnixNano())
+	if match := c.GetHeader("If-None-Match"); match == etag {
+		c.Status(http.StatusNotModified)
+		return
+	}
+
+	c.Header("ETag", etag)
 	response := resdto.FromReservationRM(reservationRM)
 	c.JSON(http.StatusOK, response)
 }
@@ -166,17 +183,18 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Internal server error",
-		})
+		slog.Error("Failed to get user ID from context")
+		httperr.AbortWithError(c, http.StatusInternalServerError,
+			errors.New("user context missing"), httperr.TypeInternal,
+			"Internal server error", nil)
 		return
 	}
 
 	reservationsRM, err := h.reservationUseCase.GetUserReservations(c.Request.Context(), userID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Internal server error",
-		})
+		slog.Error("Unexpected error in get user reservations", "user_id", userID, "error", err)
+		httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+			"Internal server error", nil)
 		return
 	}
 

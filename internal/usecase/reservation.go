@@ -33,12 +33,19 @@ var (
 	ErrReservationConflict    = errors.New("time slot conflict")
 	ErrIdempotencyKeyRequired = errors.New("idempotency-key header required")
 	ErrInvalidCoupon          = errors.New("invalid or expired coupon")
+	ErrIdempotencyInProgress  = errors.New("idempotency request in progress")
+	ErrDomainValidation       = errors.New("domain validation failed")
 
 	// Error markers for categorization
 	ErrDomainValidationFailed  = errors.New("domain validation failed")
 	ErrIdempotencyCheckFailed  = errors.New("idempotency check failed")
 	ErrDatabaseOperationFailed = errors.New("database operation failed")
 )
+
+type CreateReservationResult struct {
+	ReservationRM *readmodel.ReservationRM
+	IsReplayed    bool
+}
 
 type ReservationRepository interface {
 	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (*readmodel.ReservationRM, error)
@@ -65,7 +72,7 @@ type NotificationRepository interface {
 }
 
 type ReservationUseCase interface {
-	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*readmodel.ReservationRM, error)
+	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*CreateReservationResult, error)
 	GetReservation(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error)
 	GetUserReservations(ctx context.Context, userID uuid.UUID) ([]*readmodel.ReservationListRM, error)
 }
@@ -108,7 +115,7 @@ func (r *reservationUseCaseImpl) CreateReservation(
 	req reqdto.CreateReservationRequest,
 	userID uuid.UUID,
 	idempotencyKey uuid.UUID,
-) (*readmodel.ReservationRM, error) {
+) (*CreateReservationResult, error) {
 	requestHash := r.calculateRequestHash(req)
 	expiresAt := r.clock.Now().Add(24 * time.Hour)
 
@@ -117,10 +124,20 @@ func (r *reservationUseCaseImpl) CreateReservation(
 		return nil, err
 	}
 	if existingResult != nil {
-		return existingResult, nil
+		return &CreateReservationResult{
+			ReservationRM: existingResult,
+			IsReplayed:    true,
+		}, nil
 	}
 
-	return r.createNewReservation(ctx, req, userID, idempotencyKey)
+	reservationRM, err := r.createNewReservation(ctx, req, userID, idempotencyKey)
+	if err != nil {
+		return nil, err
+	}
+	return &CreateReservationResult{
+		ReservationRM: reservationRM,
+		IsReplayed:    false,
+	}, nil
 }
 
 func (r *reservationUseCaseImpl) handleIdempotency(
@@ -149,7 +166,7 @@ func (r *reservationUseCaseImpl) handleIdempotency(
 		if existing.RequestHash != requestHash {
 			return nil, ErrDuplicateReservation
 		}
-		return nil, nil
+		return nil, ErrIdempotencyInProgress
 
 	default:
 		return nil, errs.New("invalid idempotency key status")
@@ -184,7 +201,7 @@ func (r *reservationUseCaseImpl) createNewReservation(
 		domainData.Note,
 	)
 	if err != nil {
-		return nil, errs.Mark(err, ErrDomainValidationFailed)
+		return nil, errs.Mark(err, ErrDomainValidation)
 	}
 
 	return r.executeReservationTransaction(ctx, reservationEntity, idempotencyKey, userID)
