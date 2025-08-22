@@ -18,6 +18,13 @@ func New(msg string) error {
 	return cr.New(msg)
 }
 
+func Mark(err error, markErr error) error {
+	if err == nil {
+		return markErr
+	}
+	return cr.Mark(err, markErr)
+}
+
 func ExtractStackLines(err error, maxLines int) []string {
 	if err == nil {
 		return nil
