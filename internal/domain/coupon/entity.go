@@ -29,7 +29,10 @@ func NewCoupon(
 	percentOff *float64,
 	validFrom, validTo *time.Time,
 ) (*Coupon, error) {
-	couponCode := Code(code)
+	couponCode, err := NewCouponCode(code)
+	if err != nil {
+		return nil, err
+	}
 
 	discount, err := NewDiscount(amountOffCents, percentOff)
 	if err != nil {
