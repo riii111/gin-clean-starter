@@ -55,6 +55,7 @@ const (
 	KindDBFailure          RepositoryErrorKind = "DB_FAILURE"
 	KindDuplicateKey       RepositoryErrorKind = "DUPLICATE_KEY"
 	KindForeignKeyViolated RepositoryErrorKind = "FOREIGN_KEY_VIOLATED"
+	KindConflict           RepositoryErrorKind = "CONFLICT"
 )
 
 func classifyPgErr(err error) RepositoryErrorKind {

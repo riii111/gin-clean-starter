@@ -91,6 +91,10 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "Duplicate reservation request with different parameters",
 			})
+		case errors.Is(err, usecase.ErrReservationConflict):
+			c.JSON(http.StatusConflict, gin.H{
+				"error": "Time slot is already reserved",
+			})
 		case strings.Contains(err.Error(), "reservation in progress"):
 			c.JSON(http.StatusConflict, gin.H{
 				"error": "Reservation request is currently being processed",
