@@ -1,4 +1,4 @@
--- name: CreateIdempotencyKey :exec
+-- name: TryInsertIdempotencyKey :exec
 INSERT INTO idempotency_keys (
     key,
     user_id,
@@ -7,8 +7,9 @@ INSERT INTO idempotency_keys (
     status,
     expires_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-);
+    $1, $2, $3, $4, 'processing', $5
+)
+ON CONFLICT (key, user_id) DO NOTHING;
 
 -- name: GetIdempotencyKey :one
 SELECT 
@@ -18,17 +19,19 @@ SELECT
     request_hash,
     response_body_hash,
     status,
+    result_reservation_id,
     expires_at,
     created_at,
     updated_at
 FROM idempotency_keys 
 WHERE key = $1 AND user_id = $2;
 
--- name: UpdateIdempotencyKeyStatus :exec
+-- name: UpdateIdempotencyKeyCompleted :exec
 UPDATE idempotency_keys 
 SET 
-    status = $3,
-    response_body_hash = $4,
+    status = 'completed',
+    response_body_hash = $3,
+    result_reservation_id = $4,
     updated_at = NOW()
 WHERE key = $1 AND user_id = $2;
 

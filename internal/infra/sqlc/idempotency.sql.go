@@ -12,40 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createIdempotencyKey = `-- name: CreateIdempotencyKey :exec
-INSERT INTO idempotency_keys (
-    key,
-    user_id,
-    endpoint,
-    request_hash,
-    status,
-    expires_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6
-)
-`
-
-type CreateIdempotencyKeyParams struct {
-	Key         uuid.UUID          `json:"key"`
-	UserID      uuid.UUID          `json:"user_id"`
-	Endpoint    string             `json:"endpoint"`
-	RequestHash string             `json:"request_hash"`
-	Status      string             `json:"status"`
-	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
-}
-
-func (q *Queries) CreateIdempotencyKey(ctx context.Context, db DBTX, arg CreateIdempotencyKeyParams) error {
-	_, err := db.Exec(ctx, createIdempotencyKey,
-		arg.Key,
-		arg.UserID,
-		arg.Endpoint,
-		arg.RequestHash,
-		arg.Status,
-		arg.ExpiresAt,
-	)
-	return err
-}
-
 const deleteExpiredIdempotencyKeys = `-- name: DeleteExpiredIdempotencyKeys :execrows
 DELETE FROM idempotency_keys 
 WHERE expires_at < NOW()
@@ -67,6 +33,7 @@ SELECT
     request_hash,
     response_body_hash,
     status,
+    result_reservation_id,
     expires_at,
     created_at,
     updated_at
@@ -79,9 +46,22 @@ type GetIdempotencyKeyParams struct {
 	UserID uuid.UUID `json:"user_id"`
 }
 
-func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempotencyKeyParams) (IdempotencyKeys, error) {
+type GetIdempotencyKeyRow struct {
+	Key                 uuid.UUID          `json:"key"`
+	UserID              uuid.UUID          `json:"user_id"`
+	Endpoint            string             `json:"endpoint"`
+	RequestHash         string             `json:"request_hash"`
+	ResponseBodyHash    pgtype.Text        `json:"response_body_hash"`
+	Status              string             `json:"status"`
+	ResultReservationID pgtype.UUID        `json:"result_reservation_id"`
+	ExpiresAt           pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempotencyKeyParams) (GetIdempotencyKeyRow, error) {
 	row := db.QueryRow(ctx, getIdempotencyKey, arg.Key, arg.UserID)
-	var i IdempotencyKeys
+	var i GetIdempotencyKeyRow
 	err := row.Scan(
 		&i.Key,
 		&i.UserID,
@@ -89,6 +69,7 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempot
 		&i.RequestHash,
 		&i.ResponseBodyHash,
 		&i.Status,
+		&i.ResultReservationID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -96,28 +77,62 @@ func (q *Queries) GetIdempotencyKey(ctx context.Context, db DBTX, arg GetIdempot
 	return i, err
 }
 
-const updateIdempotencyKeyStatus = `-- name: UpdateIdempotencyKeyStatus :exec
+const tryInsertIdempotencyKey = `-- name: TryInsertIdempotencyKey :exec
+INSERT INTO idempotency_keys (
+    key,
+    user_id,
+    endpoint,
+    request_hash,
+    status,
+    expires_at
+) VALUES (
+    $1, $2, $3, $4, 'processing', $5
+)
+ON CONFLICT (key, user_id) DO NOTHING
+`
+
+type TryInsertIdempotencyKeyParams struct {
+	Key         uuid.UUID          `json:"key"`
+	UserID      uuid.UUID          `json:"user_id"`
+	Endpoint    string             `json:"endpoint"`
+	RequestHash string             `json:"request_hash"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) TryInsertIdempotencyKey(ctx context.Context, db DBTX, arg TryInsertIdempotencyKeyParams) error {
+	_, err := db.Exec(ctx, tryInsertIdempotencyKey,
+		arg.Key,
+		arg.UserID,
+		arg.Endpoint,
+		arg.RequestHash,
+		arg.ExpiresAt,
+	)
+	return err
+}
+
+const updateIdempotencyKeyCompleted = `-- name: UpdateIdempotencyKeyCompleted :exec
 UPDATE idempotency_keys 
 SET 
-    status = $3,
-    response_body_hash = $4,
+    status = 'completed',
+    response_body_hash = $3,
+    result_reservation_id = $4,
     updated_at = NOW()
 WHERE key = $1 AND user_id = $2
 `
 
-type UpdateIdempotencyKeyStatusParams struct {
-	Key              uuid.UUID   `json:"key"`
-	UserID           uuid.UUID   `json:"user_id"`
-	Status           string      `json:"status"`
-	ResponseBodyHash pgtype.Text `json:"response_body_hash"`
+type UpdateIdempotencyKeyCompletedParams struct {
+	Key                 uuid.UUID   `json:"key"`
+	UserID              uuid.UUID   `json:"user_id"`
+	ResponseBodyHash    pgtype.Text `json:"response_body_hash"`
+	ResultReservationID pgtype.UUID `json:"result_reservation_id"`
 }
 
-func (q *Queries) UpdateIdempotencyKeyStatus(ctx context.Context, db DBTX, arg UpdateIdempotencyKeyStatusParams) error {
-	_, err := db.Exec(ctx, updateIdempotencyKeyStatus,
+func (q *Queries) UpdateIdempotencyKeyCompleted(ctx context.Context, db DBTX, arg UpdateIdempotencyKeyCompletedParams) error {
+	_, err := db.Exec(ctx, updateIdempotencyKeyCompleted,
 		arg.Key,
 		arg.UserID,
-		arg.Status,
 		arg.ResponseBodyHash,
+		arg.ResultReservationID,
 	)
 	return err
 }
