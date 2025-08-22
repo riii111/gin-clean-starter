@@ -61,7 +61,7 @@ type IdempotencyRepository interface {
 }
 
 type NotificationRepository interface {
-	CreateJob(ctx context.Context, tx sqlc.DBTX, kind string, payload []byte, runAt time.Time) error
+	CreateJob(ctx context.Context, tx sqlc.DBTX, kind, topic string, payload []byte, runAt time.Time) error
 }
 
 type ReservationUseCase interface {
@@ -71,13 +71,14 @@ type ReservationUseCase interface {
 }
 
 type reservationUseCaseImpl struct {
-	reservationRepo  ReservationRepository
-	resourceRepo     ResourceRepository
-	couponRepo       CouponRepository
-	idempotencyRepo  IdempotencyRepository
-	notificationRepo NotificationRepository
-	db               *pgxpool.Pool
-	clock            clock.Clock
+	reservationRepo    ReservationRepository
+	resourceRepo       ResourceRepository
+	couponRepo         CouponRepository
+	idempotencyRepo    IdempotencyRepository
+	notificationRepo   NotificationRepository
+	reservationFactory *reservation.Factory
+	db                 *pgxpool.Pool
+	clock              clock.Clock
 }
 
 func NewReservationUseCase(
@@ -86,17 +87,19 @@ func NewReservationUseCase(
 	couponRepo CouponRepository,
 	idempotencyRepo IdempotencyRepository,
 	notificationRepo NotificationRepository,
+	reservationFactory *reservation.Factory,
 	db *pgxpool.Pool,
 	clock clock.Clock,
 ) ReservationUseCase {
 	return &reservationUseCaseImpl{
-		reservationRepo:  reservationRepo,
-		resourceRepo:     resourceRepo,
-		couponRepo:       couponRepo,
-		idempotencyRepo:  idempotencyRepo,
-		notificationRepo: notificationRepo,
-		db:               db,
-		clock:            clock,
+		reservationRepo:    reservationRepo,
+		resourceRepo:       resourceRepo,
+		couponRepo:         couponRepo,
+		idempotencyRepo:    idempotencyRepo,
+		notificationRepo:   notificationRepo,
+		reservationFactory: reservationFactory,
+		db:                 db,
+		clock:              clock,
 	}
 }
 
@@ -168,7 +171,18 @@ func (r *reservationUseCaseImpl) createNewReservation(
 		return nil, err
 	}
 
-	reservationEntity, err := req.ToDomain(userID, resourceEntity, couponEntity)
+	domainData, err := req.ToDomain()
+	if err != nil {
+		return nil, errs.Mark(err, ErrInvalidTimeSlot)
+	}
+
+	reservationEntity, err := r.reservationFactory.CreateReservation(
+		resourceEntity,
+		userID,
+		domainData.TimeSlot,
+		couponEntity,
+		domainData.Note,
+	)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
@@ -281,7 +295,7 @@ func (r *reservationUseCaseImpl) createNotificationJob(
 		return err
 	}
 
-	return r.notificationRepo.CreateJob(ctx, tx, "reservation_created", notificationPayload, r.clock.Now())
+	return r.notificationRepo.CreateJob(ctx, tx, "email", "reservation_created", notificationPayload, r.clock.Now())
 }
 
 func (r *reservationUseCaseImpl) GetReservation(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error) {
