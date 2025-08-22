@@ -34,13 +34,8 @@ func NewReservation(
 	price Money,
 	couponID *uuid.UUID,
 	note Note,
-	leadTimeMinutes int,
+	_ int, // leadTimeMinutes - validation moved to Factory
 ) (*Reservation, error) {
-	// Validate lead time requirement
-	if !timeSlot.MeetsLeadTime(leadTimeMinutes) {
-		return nil, ErrLeadTimeNotMet
-	}
-
 	return &Reservation{
 		id:         uuid.New(),
 		resourceID: resourceID,
