@@ -4,9 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"gin-clean-starter/internal/domain/coupon"
 	"gin-clean-starter/internal/domain/reservation"
-	"gin-clean-starter/internal/domain/resource"
 
 	"github.com/google/uuid"
 )
@@ -30,51 +28,31 @@ func (r CreateReservationRequest) GetCouponCode() *string {
 	return &trimmed
 }
 
-func (r CreateReservationRequest) ToDomain(
-	userID uuid.UUID,
-	resourceEntity *resource.Resource,
-	couponEntity *coupon.Coupon,
-) (*reservation.Reservation, error) {
+type DomainConversion struct {
+	TimeSlot reservation.TimeSlot
+	Note     reservation.Note
+}
+
+func (r CreateReservationRequest) ToDomain() (*DomainConversion, error) {
 	timeSlot, err := reservation.NewTimeSlot(r.StartTime, r.EndTime)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := timeSlot.ValidateLeadTime(resourceEntity.LeadTimeMin()); err != nil {
+	note, err := reservation.NewNote("")
+	if err != nil {
 		return nil, err
 	}
 
-	// Calculate price in usecase layer
-	duration := timeSlot.Duration()
-	hours := duration.Hours()
-	basePriceCents := int64(hours * 1000 * 100) // 1000円/時間
-
-	// Apply coupon discount if available
-	if couponEntity != nil {
-		basePriceCents = couponEntity.ApplyDiscount(basePriceCents)
-	}
-
-	price := reservation.NewMoney(basePriceCents)
-
-	note := reservation.NewNote("")
 	if r.Note != nil {
-		trimmedNote := strings.TrimSpace(*r.Note)
-		note = reservation.NewNote(trimmedNote)
+		note, err = reservation.NewNote(*r.Note)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	var couponID *uuid.UUID
-	if couponEntity != nil {
-		id := couponEntity.ID()
-		couponID = &id
-	}
-
-	return reservation.NewReservation(
-		r.ResourceID,
-		userID,
-		timeSlot,
-		price,
-		couponID,
-		note,
-		resourceEntity.LeadTimeMin(),
-	)
+	return &DomainConversion{
+		TimeSlot: timeSlot,
+		Note:     note,
+	}, nil
 }
