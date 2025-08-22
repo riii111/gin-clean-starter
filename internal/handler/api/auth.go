@@ -2,10 +2,12 @@ package api
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
 	"gin-clean-starter/internal/pkg/config"
 	"gin-clean-starter/internal/pkg/cookie"
@@ -42,39 +44,38 @@ func NewAuthHandler(authUseCase usecase.AuthUseCase, jwtService *jwt.Service, cf
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req reqdto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request format",
-		})
+		slog.Warn("Invalid request format in login", "error", err)
+		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeValidation,
+			"Invalid request format", nil)
 		return
 	}
 
 	credentials, err := req.ToDomain()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid request data",
-		})
+		slog.Warn("Invalid request data in login", "error", err)
+		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+			"Invalid request data", nil)
 		return
 	}
 
 	pair, user, err := h.authUseCase.Login(c.Request.Context(), credentials)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrInvalidCredentials):
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid email or password",
-			})
-		case errors.Is(err, usecase.ErrUserNotFound):
-			c.JSON(http.StatusUnauthorized, gin.H{
-				"error": "Invalid email or password",
-			})
+		case errors.Is(err, usecase.ErrInvalidCredentials),
+			errors.Is(err, usecase.ErrUserNotFound):
+			slog.Warn("Login failed due to invalid credentials",
+				"email", credentials.Email, "error", err)
+			httperr.AbortWithError(c, http.StatusUnauthorized, err, httperr.TypeAuth,
+				"Invalid email or password", nil)
 		case errors.Is(err, usecase.ErrUserInactive):
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Account is inactive",
-			})
+			slog.Warn("Login failed due to inactive user",
+				"email", credentials.Email, "error", err)
+			httperr.AbortWithError(c, http.StatusForbidden, err, httperr.TypeAuth,
+				"Account is inactive", nil)
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Internal server error",
-			})
+			slog.Error("Unexpected error in login", "error", err)
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+				"Internal server error", nil)
 		}
 		return
 	}
@@ -82,6 +83,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	cookie.SetTokenCookies(c, h.cfg.Cookie, pair.AccessToken, pair.RefreshToken,
 		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
 
+	slog.Info("User logged in successfully", "user_id", user.ID)
 	response := resdto.LoginResponse{User: user}
 	c.JSON(http.StatusOK, response)
 }
@@ -110,10 +112,10 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		// Unexpected error: auth middleware should guarantee user_id exists
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Internal server error",
-		})
+		slog.Error("User ID not found in context")
+		httperr.AbortWithError(c, http.StatusInternalServerError,
+			errors.New("user_id not found in context"), httperr.TypeInternal,
+			"Authentication context error", nil)
 		return
 	}
 
@@ -121,17 +123,17 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, usecase.ErrUserNotFound):
-			c.JSON(http.StatusNotFound, gin.H{
-				"error": "User not found",
-			})
+			slog.Warn("User not found", "user_id", userID, "error", err)
+			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+				"User not found", nil)
 		case errors.Is(err, usecase.ErrUserInactive):
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Account is inactive",
-			})
+			slog.Warn("User account is inactive", "user_id", userID, "error", err)
+			httperr.AbortWithError(c, http.StatusForbidden, err, httperr.TypeAuth,
+				"Account is inactive", nil)
 		default:
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error": "Internal server error",
-			})
+			slog.Error("Unexpected error in get current user", "user_id", userID, "error", err)
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+				"Internal server error", nil)
 		}
 		return
 	}
@@ -149,23 +151,25 @@ func (h *AuthHandler) Me(c *gin.Context) {
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	refreshToken := cookie.GetRefreshToken(c)
 	if refreshToken == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Refresh token not found",
-		})
+		slog.Warn("Refresh token not found in cookie")
+		httperr.AbortWithError(c, http.StatusUnauthorized,
+			errors.New("refresh token not found in cookie"), httperr.TypeAuth,
+			"Refresh token not found", nil)
 		return
 	}
 
 	pair, err := h.authUseCase.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Invalid or expired refresh token",
-		})
+		slog.Warn("Token refresh failed", "error", err)
+		httperr.AbortWithError(c, http.StatusUnauthorized, err, httperr.TypeAuth,
+			"Invalid or expired refresh token", nil)
 		return
 	}
 
 	cookie.SetTokenCookies(c, h.cfg.Cookie, pair.AccessToken, pair.RefreshToken,
 		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
 
+	slog.Info("Token refreshed successfully")
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Token refreshed successfully",
 	})
