@@ -5,10 +5,12 @@ package helper
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func AssertSuccessResponse(t *testing.T, w *httptest.ResponseRecorder, expectedStatus int, targetStruct any) {
@@ -39,4 +41,14 @@ func AssertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedSta
 		assert.Contains(t, errorResponse["error"], expectedErrorMsg,
 			"Response error message doesn't contain expected text")
 	}
+}
+
+// DecodeResponseBody decodes JSON response body into target struct
+func DecodeResponseBody(t *testing.T, body io.Reader, target any) error {
+	t.Helper()
+
+	err := json.NewDecoder(body).Decode(target)
+	require.NoError(t, err, "Failed to decode response body")
+
+	return err
 }
