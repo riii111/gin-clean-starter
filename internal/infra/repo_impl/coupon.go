@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"gin-clean-starter/internal/infra"
+	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/internal/usecase/readmodel"
 
@@ -38,7 +39,11 @@ func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*readmo
 		return nil, infra.WrapRepoErr("failed to find coupon by code", err)
 	}
 
-	return toCouponRMFromRow(row), nil
+	rm, err := toCouponRMFromRow(row)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
+	}
+	return rm, nil
 }
 
 func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.CouponRM, error) {
@@ -50,10 +55,14 @@ func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmod
 		return nil, infra.WrapRepoErr("failed to find coupon by ID", err)
 	}
 
-	return toCouponRMFromRow(row), nil
+	rm, err := toCouponRMFromRow(row)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
+	}
+	return rm, nil
 }
 
-func toCouponRMFromRow(row sqlc.Coupons) *readmodel.CouponRM {
+func toCouponRMFromRow(row sqlc.Coupons) (*readmodel.CouponRM, error) {
 	rm := &readmodel.CouponRM{
 		ID:        row.ID,
 		Code:      row.Code,
@@ -66,11 +75,11 @@ func toCouponRMFromRow(row sqlc.Coupons) *readmodel.CouponRM {
 		rm.AmountOffCents = &amountOff
 	}
 
-	if row.PercentOff.Valid {
-		percentOffFloat8, _ := row.PercentOff.Float64Value()
-		percentOff := percentOffFloat8.Float64
-		rm.PercentOff = &percentOff
+	percentOff, err := pgconv.Float64PtrFromNumeric(row.PercentOff)
+	if err != nil {
+		return nil, err
 	}
+	rm.PercentOff = percentOff
 
 	if row.ValidFrom.Valid {
 		validFrom := row.ValidFrom.Time
@@ -82,5 +91,5 @@ func toCouponRMFromRow(row sqlc.Coupons) *readmodel.CouponRM {
 		rm.ValidTo = &validTo
 	}
 
-	return rm
+	return rm, nil
 }

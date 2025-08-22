@@ -4,22 +4,23 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
+	"strings"
 
 	"gin-clean-starter/internal/domain/reservation"
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/converter"
+	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/internal/usecase/readmodel"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type ReservationQueries interface {
 	CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (sqlc.Reservations, error)
 	GetReservationByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReservationByIDRow, error)
 	GetReservationsByUserID(ctx context.Context, db sqlc.DBTX, userID uuid.UUID) ([]sqlc.GetReservationsByUserIDRow, error)
+	GetReservationsByUserIDPaginated(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDPaginatedParams) ([]sqlc.GetReservationsByUserIDPaginatedRow, error)
 }
 
 type ReservationRepository struct {
@@ -39,6 +40,9 @@ func (r *ReservationRepository) Create(ctx context.Context, tx sqlc.DBTX, res *r
 
 	result, err := r.queries.CreateReservation(ctx, tx, params)
 	if err != nil {
+		if strings.Contains(err.Error(), "reservations_no_overlap") {
+			return nil, infra.WrapRepoErr("time slot conflict", err, infra.KindConflict)
+		}
 		return nil, infra.WrapRepoErr("failed to create reservation", err)
 	}
 
@@ -86,11 +90,11 @@ func toReservationRMFromDetailRow(row sqlc.GetReservationByIDRow) *readmodel.Res
 		Slot:         row.Slot,
 		Status:       row.Status,
 		PriceCents:   row.PriceCents,
-		CouponID:     pgtypeToUUIDPtr(row.CouponID),
-		CouponCode:   pgtypeToStringPtr(row.CouponCode),
-		Note:         pgtypeToStringPtr(row.Note),
-		CreatedAt:    pgtypeToTime(row.CreatedAt),
-		UpdatedAt:    pgtypeToTime(row.UpdatedAt),
+		CouponID:     pgconv.UUIDPtrFromPgtype(row.CouponID),
+		CouponCode:   pgconv.StringPtrFromPgtype(row.CouponCode),
+		Note:         pgconv.StringPtrFromPgtype(row.Note),
+		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
+		UpdatedAt:    pgconv.TimeFromPgtype(row.UpdatedAt),
 	}
 }
 
@@ -102,25 +106,6 @@ func toReservationListRMFromUserRow(row sqlc.GetReservationsByUserIDRow) *readmo
 		Slot:         row.Slot,
 		Status:       row.Status,
 		PriceCents:   row.PriceCents,
-		CreatedAt:    pgtypeToTime(row.CreatedAt),
+		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
 	}
-}
-
-func pgtypeToUUIDPtr(pu pgtype.UUID) *uuid.UUID {
-	if !pu.Valid {
-		return nil
-	}
-	id := uuid.UUID(pu.Bytes)
-	return &id
-}
-
-func pgtypeToStringPtr(pt pgtype.Text) *string {
-	if !pt.Valid {
-		return nil
-	}
-	return &pt.String
-}
-
-func pgtypeToTime(pt pgtype.Timestamptz) time.Time {
-	return pt.Time
 }
