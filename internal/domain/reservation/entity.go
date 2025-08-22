@@ -34,7 +34,7 @@ func NewReservation(
 	price Money,
 	couponID *uuid.UUID,
 	note Note,
-	_ int, // leadTimeMinutes - validation moved to Factory
+	_ int,
 ) (*Reservation, error) {
 	return &Reservation{
 		id:         uuid.New(),

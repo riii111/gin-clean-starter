@@ -27,18 +27,15 @@ func (f *Factory) CreateReservation(
 	couponEntity *coupon.Coupon,
 	note Note,
 ) (*Reservation, error) {
-	// Validate lead time requirement
 	if err := slot.ValidateLeadTimeAt(f.Clock.Now(), resourceEntity.LeadTimeMin()); err != nil {
 		return nil, err
 	}
 
-	// Calculate base price
 	basePriceCents := f.PriceCalculator.CalculatePriceCents(resourceEntity, slot)
 	if basePriceCents < 0 {
 		return nil, ErrNegativePrice
 	}
 
-	// Apply coupon discount if available
 	if couponEntity != nil {
 		if err := couponEntity.ValidateUsage(f.Clock.Now()); err != nil {
 			return nil, err
