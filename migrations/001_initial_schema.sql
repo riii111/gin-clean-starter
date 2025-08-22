@@ -79,7 +79,8 @@ CREATE TABLE idempotency_keys (
     endpoint TEXT NOT NULL,
     request_hash TEXT NOT NULL,
     response_body_hash TEXT,
-    status TEXT NOT NULL CHECK (status IN ('in_progress', 'succeeded', 'failed')) DEFAULT 'in_progress',
+    status TEXT NOT NULL CHECK (status IN ('processing', 'completed', 'failed')) DEFAULT 'processing',
+    result_reservation_id UUID REFERENCES reservations(id),
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -95,6 +96,7 @@ CREATE INDEX idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX idx_reservations_slot ON reservations USING gist(slot);
 CREATE INDEX idx_notification_jobs_status_run_at ON notification_jobs(status, run_at);
 CREATE INDEX idx_idempotency_keys_expires_at ON idempotency_keys(expires_at);
+CREATE UNIQUE INDEX idx_idempotency_unique ON idempotency_keys(key, user_id);
 
 -- Insert initial data
 INSERT INTO companies (id, name) VALUES 
