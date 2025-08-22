@@ -27,7 +27,8 @@ func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandl
 func setupMiddleware(engine *gin.Engine, cfg config.Config) {
 	engine.Use(middleware.NewCORSMiddleware(cfg.CORS))
 	engine.Use(middleware.LoggingMiddleware(nil, cfg.Log))
-	engine.Use(gin.Recovery())
+	engine.Use(middleware.ErrorHandler())
+	engine.Use(middleware.CustomRecovery())
 }
 
 func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, authMiddleware *middleware.AuthMiddleware) {

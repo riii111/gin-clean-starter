@@ -24,7 +24,7 @@ type Response struct {
 	Detail any `json:"detail,omitempty"`
 }
 
-// AbortWithError preserves original error for future monitoring
+// preserves original error for future monitoring
 func AbortWithError(c *gin.Context, status int, err error, errType ErrorType, msg string, detail any) {
 	if err == nil {
 		panic("AbortWithError: err cannot be nil")
