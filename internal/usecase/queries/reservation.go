@@ -25,7 +25,6 @@ const (
 type ReservationQueries interface {
 	GetByID(ctx context.Context, actor uuid.UUID, id uuid.UUID) (*ReservationView, error)
 	GetByIDWithRole(ctx context.Context, actorID uuid.UUID, actorRole string, id uuid.UUID) (*ReservationView, error)
-	GetByIDSystem(ctx context.Context, id uuid.UUID) (*ReservationView, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, after *Cursor, limit int) ([]*ReservationListItem, *Cursor, error)
 	GenerateETag(reservation *ReservationView) string
 }
@@ -88,14 +87,6 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 
 func (q *reservationQueriesImpl) GenerateETag(reservation *ReservationView) string {
 	return fmt.Sprintf("W/\"%s-%d\"", reservation.ID.String(), reservation.UpdatedAt.UnixNano())
-}
-
-func (q *reservationQueriesImpl) GetByIDSystem(ctx context.Context, id uuid.UUID) (*ReservationView, error) {
-	reservation, err := q.repo.FindByID(ctx, id)
-	if err != nil {
-		return nil, errs.Mark(err, ErrReservationNotFound)
-	}
-	return reservation, nil
 }
 
 func encodeCursor(createdAt time.Time, id uuid.UUID) string {
