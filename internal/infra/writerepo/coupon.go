@@ -1,4 +1,4 @@
-package repo_impl
+package writerepo
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
@@ -28,7 +28,7 @@ func NewCouponRepository(queries *sqlc.Queries, db sqlc.DBTX) *CouponRepository 
 	}
 }
 
-func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*readmodel.CouponRM, error) {
+func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*queries.CouponView, error) {
 	row, err := r.queries.GetCouponByCode(ctx, r.db, code)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -37,14 +37,14 @@ func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*readmo
 		return nil, infra.WrapRepoErr("failed to find coupon by code", err)
 	}
 
-	rm, err := toCouponRMFromRow(row)
+	rm, err := toCouponViewFromRow(row)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
 	}
 	return rm, nil
 }
 
-func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.CouponRM, error) {
+func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.CouponView, error) {
 	row, err := r.queries.GetCouponByID(ctx, r.db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -53,15 +53,15 @@ func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmod
 		return nil, infra.WrapRepoErr("failed to find coupon by ID", err)
 	}
 
-	rm, err := toCouponRMFromRow(row)
+	rm, err := toCouponViewFromRow(row)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
 	}
 	return rm, nil
 }
 
-func toCouponRMFromRow(row sqlc.Coupons) (*readmodel.CouponRM, error) {
-	rm := &readmodel.CouponRM{
+func toCouponViewFromRow(row sqlc.Coupons) (*queries.CouponView, error) {
+	rm := &queries.CouponView{
 		ID:        row.ID,
 		Code:      row.Code,
 		CreatedAt: row.CreatedAt.Time,

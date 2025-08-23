@@ -1,4 +1,4 @@
-package repo_impl
+package writerepo
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -47,15 +47,15 @@ func (r *NotificationRepository) CreateJob(ctx context.Context, tx sqlc.DBTX, ki
 	return nil
 }
 
-func (r *NotificationRepository) GetPendingJobs(ctx context.Context, limit int32) ([]*readmodel.NotificationJobRM, error) {
+func (r *NotificationRepository) GetPendingJobs(ctx context.Context, limit int32) ([]*queries.NotificationJobView, error) {
 	rows, err := r.queries.GetPendingNotificationJobs(ctx, r.db, limit)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to get pending notification jobs", err)
 	}
 
-	result := make([]*readmodel.NotificationJobRM, len(rows))
+	result := make([]*queries.NotificationJobView, len(rows))
 	for i, row := range rows {
-		result[i] = toNotificationJobRMFromRow(row)
+		result[i] = toNotificationJobViewFromRow(row)
 	}
 
 	return result, nil
@@ -81,8 +81,8 @@ func (r *NotificationRepository) UpdateJobStatus(ctx context.Context, tx sqlc.DB
 	return nil
 }
 
-func toNotificationJobRMFromRow(row sqlc.NotificationJobs) *readmodel.NotificationJobRM {
-	rm := &readmodel.NotificationJobRM{
+func toNotificationJobViewFromRow(row sqlc.NotificationJobs) *queries.NotificationJobView {
+	rm := &queries.NotificationJobView{
 		ID:        row.ID,
 		Kind:      row.Kind,
 		Topic:     row.Topic,

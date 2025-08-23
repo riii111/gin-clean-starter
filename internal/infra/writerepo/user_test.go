@@ -1,6 +1,6 @@
 //go:build unit
 
-package repo_impl
+package writerepo
 
 import (
 	"context"

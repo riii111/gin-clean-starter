@@ -105,7 +105,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 // @Tags auth
 // @Security BearerAuth
 // @Produce json
-// @Success 200 {object} readmodel.AuthorizedUserRM
+// @Success 200 {object} queries.AuthorizedUserView
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Router /auth/me [get]

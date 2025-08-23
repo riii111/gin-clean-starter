@@ -3,7 +3,7 @@ package response
 import (
 	"time"
 
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
@@ -34,7 +34,7 @@ type ReservationListResponse struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-func FromReservationRM(rm *readmodel.ReservationRM) *ReservationResponse {
+func FromReservationView(rm *queries.ReservationView) *ReservationResponse {
 	return &ReservationResponse{
 		ID:           rm.ID,
 		ResourceID:   rm.ResourceID,
@@ -52,7 +52,7 @@ func FromReservationRM(rm *readmodel.ReservationRM) *ReservationResponse {
 	}
 }
 
-func FromReservationListRM(rm *readmodel.ReservationListRM) *ReservationListResponse {
+func FromReservationListItem(rm *queries.ReservationListItem) *ReservationListResponse {
 	return &ReservationListResponse{
 		ID:           rm.ID,
 		ResourceID:   rm.ResourceID,

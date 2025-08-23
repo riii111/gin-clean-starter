@@ -9,7 +9,7 @@ import (
 	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/pkg/jwt"
 	"gin-clean-starter/internal/pkg/password"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
@@ -24,8 +24,8 @@ var (
 )
 
 type UserRepository interface {
-	FindByEmail(ctx context.Context, email user.Email) (*readmodel.AuthorizedUserRM, string, error)
-	FindByID(ctx context.Context, id uuid.UUID) (*readmodel.AuthorizedUserRM, error)
+	FindByEmail(ctx context.Context, email user.Email) (*queries.AuthorizedUserView, string, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*queries.AuthorizedUserView, error)
 	UpdateLastLogin(ctx context.Context, userID uuid.UUID) error
 }
 
@@ -35,9 +35,9 @@ type TokenPair struct {
 }
 
 type AuthUseCase interface {
-	Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *readmodel.AuthorizedUserRM, error)
+	Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *queries.AuthorizedUserView, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*TokenPair, error)
-	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error)
+	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*queries.AuthorizedUserView, error)
 	ValidateToken(tokenString string) (uuid.UUID, user.Role, error)
 }
 
@@ -53,7 +53,7 @@ func NewAuthUseCase(userRepo UserRepository, jwtService *jwt.Service) AuthUseCas
 	}
 }
 
-func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*TokenPair, *queries.AuthorizedUserView, error) {
 	credentials, err := req.ToDomain()
 	if err != nil {
 		return nil, nil, ErrAuthenticationFailed
@@ -135,7 +135,7 @@ func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string)
 	}, nil
 }
 
-func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Credentials) (*readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Credentials) (*queries.AuthorizedUserView, error) {
 	userReadModel, hashedPassword, err := a.userRepo.FindByEmail(ctx, credentials.Email())
 	if err != nil {
 		// Return same error as password mismatch to prevent user enumeration attacks
@@ -154,7 +154,7 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 	return userReadModel, nil
 }
 
-func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
+func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*queries.AuthorizedUserView, error) {
 	user, err := a.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
 		if err != nil {

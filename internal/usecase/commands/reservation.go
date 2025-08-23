@@ -1,4 +1,4 @@
-package usecase
+package commands
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"gin-clean-starter/internal/infra/sqlc"
 	"gin-clean-starter/internal/pkg/clock"
 	"gin-clean-starter/internal/pkg/errs"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -43,27 +43,25 @@ var (
 )
 
 type CreateReservationResult struct {
-	ReservationRM *readmodel.ReservationRM
-	IsReplayed    bool
+	Reservation *queries.ReservationView
+	IsReplayed  bool
 }
 
 type ReservationRepository interface {
-	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (*readmodel.ReservationRM, error)
-	FindByID(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error)
-	FindByUserID(ctx context.Context, userID uuid.UUID) ([]*readmodel.ReservationListRM, error)
+	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (*queries.ReservationView, error)
 }
 
 type ResourceRepository interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*readmodel.ResourceRM, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*queries.ResourceView, error)
 }
 
 type CouponRepository interface {
-	FindByCode(ctx context.Context, code string) (*readmodel.CouponRM, error)
+	FindByCode(ctx context.Context, code string) (*queries.CouponView, error)
 }
 
 type IdempotencyRepository interface {
 	TryInsert(ctx context.Context, key uuid.UUID, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error
-	Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*readmodel.IdempotencyKeyRM, error)
+	Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*queries.IdempotencyKeyView, error)
 	UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error
 }
 
@@ -73,8 +71,6 @@ type NotificationRepository interface {
 
 type ReservationUseCase interface {
 	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*CreateReservationResult, error)
-	GetReservation(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error)
-	GetUserReservations(ctx context.Context, userID uuid.UUID) ([]*readmodel.ReservationListRM, error)
 }
 
 type reservationUseCaseImpl struct {
@@ -84,6 +80,7 @@ type reservationUseCaseImpl struct {
 	idempotencyRepo    IdempotencyRepository
 	notificationRepo   NotificationRepository
 	reservationFactory *reservation.Factory
+	reservationQueries queries.ReservationQueries
 	db                 *pgxpool.Pool
 	clock              clock.Clock
 }
@@ -95,6 +92,7 @@ func NewReservationUseCase(
 	idempotencyRepo IdempotencyRepository,
 	notificationRepo NotificationRepository,
 	reservationFactory *reservation.Factory,
+	reservationQueries queries.ReservationQueries,
 	db *pgxpool.Pool,
 	clock clock.Clock,
 ) ReservationUseCase {
@@ -105,6 +103,7 @@ func NewReservationUseCase(
 		idempotencyRepo:    idempotencyRepo,
 		notificationRepo:   notificationRepo,
 		reservationFactory: reservationFactory,
+		reservationQueries: reservationQueries,
 		db:                 db,
 		clock:              clock,
 	}
@@ -125,18 +124,18 @@ func (r *reservationUseCaseImpl) CreateReservation(
 	}
 	if existingResult != nil {
 		return &CreateReservationResult{
-			ReservationRM: existingResult,
-			IsReplayed:    true,
+			Reservation: existingResult,
+			IsReplayed:  true,
 		}, nil
 	}
 
-	reservationRM, err := r.createNewReservation(ctx, req, userID, idempotencyKey)
+	reservationView, err := r.createNewReservation(ctx, req, userID, idempotencyKey)
 	if err != nil {
 		return nil, err
 	}
 	return &CreateReservationResult{
-		ReservationRM: reservationRM,
-		IsReplayed:    false,
+		Reservation: reservationView,
+		IsReplayed:  false,
 	}, nil
 }
 
@@ -145,7 +144,7 @@ func (r *reservationUseCaseImpl) handleIdempotency(
 	idempotencyKey, userID uuid.UUID,
 	requestHash string,
 	expiresAt time.Time,
-) (*readmodel.ReservationRM, error) {
+) (*queries.ReservationView, error) {
 	if err := r.idempotencyRepo.TryInsert(ctx, idempotencyKey, userID, "POST /reservations", requestHash, expiresAt); err != nil {
 		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
 	}
@@ -158,7 +157,8 @@ func (r *reservationUseCaseImpl) handleIdempotency(
 	switch existing.Status {
 	case "completed":
 		if existing.ResultReservationID != nil {
-			return r.reservationRepo.FindByID(ctx, *existing.ResultReservationID)
+			dummyActor := uuid.New() // TODO: pass actual actor if needed
+			return r.reservationQueries.GetByID(ctx, dummyActor, *existing.ResultReservationID)
 		}
 		return nil, errs.New("completed request missing result reservation ID")
 
@@ -177,7 +177,7 @@ func (r *reservationUseCaseImpl) createNewReservation(
 	ctx context.Context,
 	req reqdto.CreateReservationRequest,
 	userID, idempotencyKey uuid.UUID,
-) (*readmodel.ReservationRM, error) {
+) (*queries.ReservationView, error) {
 	resourceEntity, err := r.validateAndGetResource(ctx, req.ResourceID)
 	if err != nil {
 		return nil, err
@@ -211,7 +211,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 	ctx context.Context,
 	reservationEntity *reservation.Reservation,
 	idempotencyKey, userID uuid.UUID,
-) (*readmodel.ReservationRM, error) {
+) (*queries.ReservationView, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
@@ -222,7 +222,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 		}
 	}()
 
-	reservationRM, err := r.reservationRepo.Create(ctx, tx, reservationEntity)
+	reservationView, err := r.reservationRepo.Create(ctx, tx, reservationEntity)
 	if err != nil {
 		if infra.IsKind(err, infra.KindConflict) {
 			return nil, ErrReservationConflict
@@ -230,12 +230,12 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	if notificationErr := r.createNotificationJob(ctx, tx, reservationRM); notificationErr != nil {
+	if notificationErr := r.createNotificationJob(ctx, tx, reservationView); notificationErr != nil {
 		return nil, errs.Mark(notificationErr, ErrDatabaseOperationFailed)
 	}
 
-	responseBodyHash := r.calculateResponseHash(reservationRM)
-	err = r.idempotencyRepo.UpdateStatusCompleted(ctx, tx, idempotencyKey, userID, responseBodyHash, reservationRM.ID)
+	responseBodyHash := r.calculateResponseHash(reservationView)
+	err = r.idempotencyRepo.UpdateStatusCompleted(ctx, tx, idempotencyKey, userID, responseBodyHash, reservationView.ID)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
@@ -244,7 +244,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	return reservationRM, nil
+	return reservationView, nil
 }
 
 func (r *reservationUseCaseImpl) validateAndGetResource(
@@ -300,13 +300,13 @@ func (r *reservationUseCaseImpl) validateAndGetCoupon(
 func (r *reservationUseCaseImpl) createNotificationJob(
 	ctx context.Context,
 	tx sqlc.DBTX,
-	reservationRM *readmodel.ReservationRM,
+	reservationView *queries.ReservationView,
 ) error {
 	notificationPayload, err := json.Marshal(map[string]any{
-		"reservation_id": reservationRM.ID,
-		"user_email":     reservationRM.UserEmail,
-		"resource_name":  reservationRM.ResourceName,
-		"slot":           reservationRM.Slot,
+		"reservation_id": reservationView.ID,
+		"user_email":     reservationView.UserEmail,
+		"resource_name":  reservationView.ResourceName,
+		"slot":           reservationView.Slot,
 	})
 	if err != nil {
 		return err
@@ -315,35 +315,14 @@ func (r *reservationUseCaseImpl) createNotificationJob(
 	return r.notificationRepo.CreateJob(ctx, tx, "email", "reservation_created", notificationPayload, r.clock.Now())
 }
 
-func (r *reservationUseCaseImpl) GetReservation(ctx context.Context, id uuid.UUID) (*readmodel.ReservationRM, error) {
-	reservation, err := r.reservationRepo.FindByID(ctx, id)
-	if err != nil {
-		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, ErrReservationNotFound
-		}
-		return nil, errs.Wrap(err, "failed to find reservation")
-	}
-
-	return reservation, nil
-}
-
-func (r *reservationUseCaseImpl) GetUserReservations(ctx context.Context, userID uuid.UUID) ([]*readmodel.ReservationListRM, error) {
-	reservations, err := r.reservationRepo.FindByUserID(ctx, userID)
-	if err != nil {
-		return nil, errs.Wrap(err, "failed to find user reservations")
-	}
-
-	return reservations, nil
-}
-
 func (r *reservationUseCaseImpl) calculateRequestHash(req reqdto.CreateReservationRequest) string {
 	data, _ := json.Marshal(req)
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }
 
-func (r *reservationUseCaseImpl) calculateResponseHash(reservationRM *readmodel.ReservationRM) string {
-	data, _ := json.Marshal(reservationRM)
+func (r *reservationUseCaseImpl) calculateResponseHash(reservationView *queries.ReservationView) string {
+	data, _ := json.Marshal(reservationView)
 	hash := sha256.Sum256(data)
 	return hex.EncodeToString(hash[:])
 }

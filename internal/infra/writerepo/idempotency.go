@@ -1,4 +1,4 @@
-package repo_impl
+package writerepo
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
@@ -48,7 +48,7 @@ func (r *IdempotencyRepository) TryInsert(ctx context.Context, key uuid.UUID, us
 	return nil
 }
 
-func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*readmodel.IdempotencyKeyRM, error) {
+func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*queries.IdempotencyKeyView, error) {
 	params := sqlc.GetIdempotencyKeyParams{
 		Key:    key,
 		UserID: userID,
@@ -62,7 +62,7 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID u
 		return nil, infra.WrapRepoErr("failed to get idempotency key", err)
 	}
 
-	rm := toIdempotencyKeyRMFromRow(row)
+	rm := toIdempotencyKeyViewFromRow(row)
 
 	// Check if key has expired (treat as not found)
 	if time.Now().After(rm.ExpiresAt) {
@@ -97,8 +97,8 @@ func (r *IdempotencyRepository) DeleteExpired(ctx context.Context) (int64, error
 	return count, nil
 }
 
-func toIdempotencyKeyRMFromRow(row sqlc.IdempotencyKeys) *readmodel.IdempotencyKeyRM {
-	rm := &readmodel.IdempotencyKeyRM{
+func toIdempotencyKeyViewFromRow(row sqlc.IdempotencyKeys) *queries.IdempotencyKeyView {
+	rm := &queries.IdempotencyKeyView{
 		Key:                 row.Key,
 		UserID:              row.UserID,
 		Endpoint:            row.Endpoint,

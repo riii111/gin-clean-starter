@@ -1,4 +1,4 @@
-package repo_impl
+package writerepo
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/pgconv"
 	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -30,21 +30,21 @@ func NewResourceRepository(queries *sqlc.Queries, db sqlc.DBTX) *ResourceReposit
 	}
 }
 
-func (r *ResourceRepository) FindAll(ctx context.Context) ([]*readmodel.ResourceRM, error) {
+func (r *ResourceRepository) FindAll(ctx context.Context) ([]*queries.ResourceView, error) {
 	rows, err := r.queries.GetAllResources(ctx, r.db)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to find all resources", err)
 	}
 
-	result := make([]*readmodel.ResourceRM, len(rows))
+	result := make([]*queries.ResourceView, len(rows))
 	for i, row := range rows {
-		result[i] = toResourceRMFromRow(row)
+		result[i] = toResourceViewFromRow(row)
 	}
 
 	return result, nil
 }
 
-func (r *ResourceRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.ResourceRM, error) {
+func (r *ResourceRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.ResourceView, error) {
 	row, err := r.queries.GetResourceByID(ctx, r.db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -53,26 +53,26 @@ func (r *ResourceRepository) FindByID(ctx context.Context, id uuid.UUID) (*readm
 		return nil, infra.WrapRepoErr("failed to find resource by ID", err)
 	}
 
-	return toResourceRMFromRow(row), nil
+	return toResourceViewFromRow(row), nil
 }
 
-func (r *ResourceRepository) SearchByName(ctx context.Context, name string) ([]*readmodel.ResourceRM, error) {
+func (r *ResourceRepository) SearchByName(ctx context.Context, name string) ([]*queries.ResourceView, error) {
 	nameParam := pgtype.Text{String: name, Valid: true}
 	rows, err := r.queries.SearchResourcesByName(ctx, r.db, nameParam)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to search resources by name", err)
 	}
 
-	result := make([]*readmodel.ResourceRM, len(rows))
+	result := make([]*queries.ResourceView, len(rows))
 	for i, row := range rows {
-		result[i] = toResourceRMFromRow(row)
+		result[i] = toResourceViewFromRow(row)
 	}
 
 	return result, nil
 }
 
-func toResourceRMFromRow(row sqlc.Resources) *readmodel.ResourceRM {
-	return &readmodel.ResourceRM{
+func toResourceViewFromRow(row sqlc.Resources) *queries.ResourceView {
+	return &queries.ResourceView{
 		ID:          row.ID,
 		Name:        row.Name,
 		LeadTimeMin: row.LeadTimeMin,

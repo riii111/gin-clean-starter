@@ -4,6 +4,7 @@ import (
 	"gin-clean-starter/internal/domain/reservation"
 	"gin-clean-starter/internal/pkg/clock"
 	"gin-clean-starter/internal/usecase"
+	"gin-clean-starter/internal/usecase/commands"
 
 	"go.uber.org/fx"
 )
@@ -17,6 +18,6 @@ var UseCaseModule = fx.Module("usecase",
 		),
 		reservation.NewFactory,
 		usecase.NewAuthUseCase,
-		usecase.NewReservationUseCase,
+		commands.NewReservationUseCase,
 	),
 )
