@@ -25,14 +25,6 @@ var RepositoryModule = fx.Module("repository",
 			fx.As(new(commands.ReservationRepository)),
 		),
 		fx.Annotate(
-			repo_impl.NewResourceRepository,
-			fx.As(new(commands.ResourceRepository)),
-		),
-		fx.Annotate(
-			repo_impl.NewCouponRepository,
-			fx.As(new(commands.CouponRepository)),
-		),
-		fx.Annotate(
 			repo_impl.NewIdempotencyRepository,
 			fx.As(new(commands.IdempotencyRepository)),
 		),
@@ -40,12 +32,24 @@ var RepositoryModule = fx.Module("repository",
 			repo_impl.NewNotificationRepository,
 			fx.As(new(commands.NotificationRepository)),
 		),
-		// Read-side repository for queries
+		// Read-side stores for Command layer
 		fx.Annotate(
 			readstore.NewReservationReadStore,
-			fx.As(new(queries.ReservationReadStore)),
+			fx.As(new(readstore.ReservationStore)),
 		),
-		// Read-side use case
+		fx.Annotate(
+			readstore.NewResourceReadStore,
+			fx.As(new(readstore.ResourceStore)),
+		),
+		fx.Annotate(
+			readstore.NewCouponReadStore,
+			fx.As(new(readstore.CouponStore)),
+		),
+		fx.Annotate(
+			readstore.NewIdempotencyReadStore,
+			fx.As(new(readstore.IdempotencyStore)),
+		),
+		// Query use cases for Handlers
 		queries.NewReservationQueries,
 	),
 )

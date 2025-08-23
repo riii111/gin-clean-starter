@@ -7,7 +7,6 @@ import (
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/pgconv"
-	"gin-clean-starter/internal/usecase/commands"
 
 	"github.com/google/uuid"
 )
@@ -31,7 +30,7 @@ func NewIdempotencyRepository(queries *sqlc.Queries, db sqlc.DBTX) *IdempotencyR
 	}
 }
 
-func (r *IdempotencyRepository) TryInsert(ctx context.Context, key uuid.UUID, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error {
+func (r *IdempotencyRepository) TryInsert(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error {
 	params := sqlc.TryInsertIdempotencyKeyParams{
 		Key:         key,
 		UserID:      userID,
@@ -40,42 +39,12 @@ func (r *IdempotencyRepository) TryInsert(ctx context.Context, key uuid.UUID, us
 		ExpiresAt:   pgconv.TimeToPgtype(expiresAt),
 	}
 
-	err := r.queries.TryInsertIdempotencyKey(ctx, r.db, params)
+	err := r.queries.TryInsertIdempotencyKey(ctx, tx, params)
 	if err != nil {
 		return infra.WrapRepoErr("failed to try insert idempotency key", err)
 	}
 
 	return nil
-}
-
-func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*commands.IdempotencyRecord, error) {
-	params := sqlc.GetIdempotencyKeyParams{
-		Key:    key,
-		UserID: userID,
-	}
-
-	row, err := r.queries.GetIdempotencyKey(ctx, r.db, params)
-	if err != nil {
-		if pgconv.IsNoRows(err) {
-			return nil, infra.WrapRepoErr("idempotency key not found", err, infra.KindNotFound)
-		}
-		return nil, infra.WrapRepoErr("failed to get idempotency key", err)
-	}
-
-	record := &commands.IdempotencyRecord{
-		Key:                 row.Key,
-		UserID:              row.UserID,
-		Status:              row.Status,
-		RequestHash:         row.RequestHash,
-		ResultReservationID: pgconv.UUIDPtrFromPgtype(row.ResultReservationID),
-		ExpiresAt:           pgconv.TimeFromPgtype(row.ExpiresAt),
-	}
-
-	if time.Now().After(record.ExpiresAt) {
-		return nil, infra.WrapRepoErr("idempotency key expired", nil, infra.KindNotFound)
-	}
-
-	return record, nil
 }
 
 func (r *IdempotencyRepository) UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error {
