@@ -12,14 +12,13 @@ import (
 	"gin-clean-starter/internal/domain/resource"
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/infra"
-	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/clock"
 	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/queries"
 	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jinzhu/copier"
 )
 
 var (
@@ -50,75 +49,25 @@ type ValidationResult struct {
 	Note     reservation.Note
 }
 
-type ReservationRepository interface {
-	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (uuid.UUID, error)
-}
-
-type IdempotencyRepository interface {
-	TryInsert(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error
-	UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error
-}
-
-type NotificationRepository interface {
-	CreateJob(ctx context.Context, tx sqlc.DBTX, kind, topic string, payload []byte, runAt time.Time) error
-}
-
-type ResourceStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*shared.ResourceSnapshot, error)
-}
-
-type CouponStore interface {
-	FindByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error)
-}
-
-type IdempotencyStore interface {
-	Get(ctx context.Context, tx sqlc.DBTX, key, userID uuid.UUID) (*shared.IdempotencyRecord, error)
-}
-
-type ReservationStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error)
-}
-
 type ReservationCommands interface {
 	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*CreateReservationResult, error)
 }
 
 type reservationUseCaseImpl struct {
-	reservationRepo    ReservationRepository
-	resourceStore      ResourceStore
-	couponStore        CouponStore
-	idempotencyRepo    IdempotencyRepository
-	idempotencyStore   IdempotencyStore
-	notificationRepo   NotificationRepository
-	reservationFactory *reservation.Factory
-	reservationStore   ReservationStore
-	db                 *pgxpool.Pool
-	clock              clock.Clock
+	uow     shared.UnitOfWork
+	factory *reservation.Factory
+	clock   clock.Clock
 }
 
 func NewReservationUseCase(
-	reservationRepo ReservationRepository,
-	resourceStore ResourceStore,
-	couponStore CouponStore,
-	idempotencyRepo IdempotencyRepository,
-	idempotencyStore IdempotencyStore,
-	notificationRepo NotificationRepository,
-	reservationFactory *reservation.Factory,
-	reservationStore ReservationStore,
-	db *pgxpool.Pool,
+	uow shared.UnitOfWork,
+	factory *reservation.Factory,
 	clock clock.Clock,
 ) ReservationCommands {
 	return &reservationUseCaseImpl{
-		reservationRepo:    reservationRepo,
-		resourceStore:      resourceStore,
-		couponStore:        couponStore,
-		idempotencyRepo:    idempotencyRepo,
-		idempotencyStore:   idempotencyStore,
-		notificationRepo:   notificationRepo,
-		reservationFactory: reservationFactory,
-		reservationStore:   reservationStore,
-		db:                 db,
-		clock:              clock,
+		uow:     uow,
+		factory: factory,
+		clock:   clock,
 	}
 }
 
@@ -131,41 +80,50 @@ func (r *reservationUseCaseImpl) CreateReservation(
 	requestHash := r.calculateRequestHash(req)
 	expiresAt := r.clock.Now().Add(24 * time.Hour)
 
-	return shared.RunInTx(ctx, r.db, func(tx sqlc.DBTX) (*CreateReservationResult, error) {
+	var result *CreateReservationResult
+
+	err := r.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		existingResult, err := r.handleIdempotencyInTx(ctx, tx, idempotencyKey, userID, requestHash, expiresAt)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if existingResult != nil {
-			return &CreateReservationResult{
+			result = &CreateReservationResult{
 				Reservation: existingResult,
 				IsReplayed:  true,
-			}, nil
+			}
+			return nil
 		}
 
 		reservationView, err := r.createNewReservationInTx(ctx, tx, req, userID, idempotencyKey)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		return &CreateReservationResult{
+		result = &CreateReservationResult{
 			Reservation: reservationView,
 			IsReplayed:  false,
-		}, nil
+		}
+		return nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	ctx context.Context,
-	tx sqlc.DBTX,
+	tx shared.Tx,
 	idempotencyKey, userID uuid.UUID,
 	requestHash string,
 	expiresAt time.Time,
 ) (*queries.ReservationView, error) {
-	if err := r.idempotencyRepo.TryInsert(ctx, tx, idempotencyKey, userID, "POST /reservations", requestHash, expiresAt); err != nil {
+	if err := tx.Idempotency().TryInsert(ctx, tx.DB(), idempotencyKey, userID, "POST /reservations", requestHash, expiresAt); err != nil {
 		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
 	}
 
-	existing, err := r.idempotencyStore.Get(ctx, tx, idempotencyKey, userID)
+	existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
 	if err != nil {
 		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
 	}
@@ -173,11 +131,15 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	switch existing.Status {
 	case "completed":
 		if existing.ResultReservationID != nil {
-			reservation, err := r.reservationStore.FindByID(ctx, *existing.ResultReservationID)
+			reservation, err := tx.Reads().ReservationByID(ctx, *existing.ResultReservationID)
 			if err != nil {
 				return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 			}
-			return reservation, nil
+			var reservationView queries.ReservationView
+			if err := copier.Copy(&reservationView, reservation); err != nil {
+				return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+			}
+			return &reservationView, nil
 		}
 		return nil, ErrMissingResultReservationID
 
@@ -194,16 +156,16 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 
 func (r *reservationUseCaseImpl) createNewReservationInTx(
 	ctx context.Context,
-	tx sqlc.DBTX,
+	tx shared.Tx,
 	req reqdto.CreateReservationRequest,
 	userID, idempotencyKey uuid.UUID,
 ) (*queries.ReservationView, error) {
-	validationResult, err := r.validateInputs(ctx, req)
+	validationResult, err := r.validateInputsInTx(ctx, tx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	reservationEntity, err := r.reservationFactory.CreateReservation(
+	reservationEntity, err := r.factory.CreateReservation(
 		validationResult.Resource,
 		userID,
 		validationResult.TimeSlot,
@@ -214,7 +176,7 @@ func (r *reservationUseCaseImpl) createNewReservationInTx(
 		return nil, errs.Mark(err, ErrDomainValidation)
 	}
 
-	reservationID, err := r.reservationRepo.Create(ctx, tx, reservationEntity)
+	reservationID, err := tx.Reservations().Create(ctx, tx.DB(), reservationEntity)
 	if err != nil {
 		if infra.IsKind(err, infra.KindConflict) {
 			return nil, ErrReservationConflict
@@ -227,29 +189,35 @@ func (r *reservationUseCaseImpl) createNewReservationInTx(
 	}
 
 	tempHash := r.calculateIDHash(reservationID)
-	err = r.idempotencyRepo.UpdateStatusCompleted(ctx, tx, idempotencyKey, userID, tempHash, reservationID)
+	err = tx.Idempotency().UpdateStatusCompleted(ctx, tx.DB(), idempotencyKey, userID, tempHash, reservationID)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	reservationView, err := r.reservationStore.FindByID(ctx, reservationID)
+	reservation, err := tx.Reads().ReservationByID(ctx, reservationID)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	return reservationView, nil
+	var reservationView queries.ReservationView
+	if err := copier.Copy(&reservationView, reservation); err != nil {
+		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+	}
+
+	return &reservationView, nil
 }
 
-func (r *reservationUseCaseImpl) validateInputs(
+func (r *reservationUseCaseImpl) validateInputsInTx(
 	ctx context.Context,
+	tx shared.Tx,
 	req reqdto.CreateReservationRequest,
 ) (*ValidationResult, error) {
-	resourceEntity, err := r.validateAndGetResource(ctx, req.ResourceID)
+	resourceEntity, err := r.validateAndGetResourceInTx(ctx, tx, req.ResourceID)
 	if err != nil {
 		return nil, err
 	}
 
-	couponEntity, err := r.validateAndGetCoupon(ctx, req.GetCouponCode())
+	couponEntity, err := r.validateAndGetCouponInTx(ctx, tx, req.GetCouponCode())
 	if err != nil {
 		return nil, err
 	}
@@ -267,11 +235,12 @@ func (r *reservationUseCaseImpl) validateInputs(
 	}, nil
 }
 
-func (r *reservationUseCaseImpl) validateAndGetResource(
+func (r *reservationUseCaseImpl) validateAndGetResourceInTx(
 	ctx context.Context,
+	tx shared.Tx,
 	resourceID uuid.UUID,
 ) (*resource.Resource, error) {
-	resourceRM, err := r.resourceStore.FindByID(ctx, resourceID)
+	resourceRM, err := tx.Reads().ResourceByID(ctx, resourceID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrResourceNotFound
@@ -282,15 +251,16 @@ func (r *reservationUseCaseImpl) validateAndGetResource(
 	return resource.NewResource(resourceRM.ID, resourceRM.Name, resourceRM.LeadTimeMin)
 }
 
-func (r *reservationUseCaseImpl) validateAndGetCoupon(
+func (r *reservationUseCaseImpl) validateAndGetCouponInTx(
 	ctx context.Context,
+	tx shared.Tx,
 	couponCode *string,
 ) (*coupon.Coupon, error) {
 	if couponCode == nil {
 		return nil, nil
 	}
 
-	couponRM, err := r.couponStore.FindByCode(ctx, *couponCode)
+	couponRM, err := tx.Reads().CouponByCode(ctx, *couponCode)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrCouponNotFound
@@ -319,10 +289,9 @@ func (r *reservationUseCaseImpl) validateAndGetCoupon(
 
 func (r *reservationUseCaseImpl) createNotificationJobByID(
 	ctx context.Context,
-	tx sqlc.DBTX,
+	tx shared.Tx,
 	reservationID uuid.UUID,
 ) error {
-	// Simple notification job with minimal data until we read the full reservation
 	notificationPayload, err := json.Marshal(map[string]any{
 		"reservation_id": reservationID,
 		"type":           "reservation_created",
@@ -331,7 +300,7 @@ func (r *reservationUseCaseImpl) createNotificationJobByID(
 		return err
 	}
 
-	return r.notificationRepo.CreateJob(ctx, tx, "email", "reservation_created", notificationPayload, r.clock.Now())
+	return tx.Notifications().CreateJob(ctx, tx.DB(), "email", "reservation_created", notificationPayload, r.clock.Now())
 }
 
 func (r *reservationUseCaseImpl) calculateRequestHash(req reqdto.CreateReservationRequest) string {
