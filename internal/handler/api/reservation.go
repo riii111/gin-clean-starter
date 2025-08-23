@@ -19,7 +19,10 @@ import (
 )
 
 var (
-	ErrMissingUserContext = errs.New("user context missing")
+	ErrMissingUserContext          = errs.New("user context missing")
+	ErrIdempotencyKeyRequired      = errs.New("idempotency key required")
+	ErrInvalidIdempotencyKeyFormat = errs.New("invalid idempotency key format")
+	ErrInvalidReservationIDFormat  = errs.New("invalid reservation ID format")
 )
 
 type ReservationHandler struct {
@@ -54,7 +57,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	if !ok {
 		slog.Error("Failed to get user ID from context")
 		httperr.AbortWithError(c, http.StatusInternalServerError,
-			errors.New("user context missing"), httperr.TypeInternal,
+			ErrMissingUserContext,
 			"Internal server error", nil)
 		return
 	}
@@ -62,7 +65,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	idempotencyKey, err := h.getIdempotencyKey(c)
 	if err != nil {
 		slog.Warn("Invalid idempotency key", "error", err)
-		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+		httperr.AbortWithError(c, http.StatusBadRequest, err,
 			err.Error(), nil)
 		return
 	}
@@ -70,7 +73,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	var req reqdto.CreateReservationRequest
 	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
 		slog.Warn("Invalid request format in create reservation", "error", bindErr)
-		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, httperr.TypeValidation,
+		httperr.AbortWithError(c, http.StatusBadRequest, bindErr,
 			"Invalid request format", nil)
 		return
 	}
@@ -81,27 +84,27 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 		case errors.Is(err, commands.ErrResourceNotFound),
 			errors.Is(err, commands.ErrCouponNotFound):
 			slog.Warn("Resource not found", "error", err)
-			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"Resource not found", nil)
 		case errors.Is(err, commands.ErrInvalidTimeSlot),
 			errors.Is(err, commands.ErrInsufficientLeadTime),
 			errors.Is(err, commands.ErrInvalidCoupon),
 			errors.Is(err, commands.ErrDomainValidation):
 			slog.Warn("Bad request", "error", err)
-			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+			httperr.AbortWithError(c, http.StatusBadRequest, err,
 				"Invalid request parameters", nil)
 		case errors.Is(err, commands.ErrDuplicateReservation),
 			errors.Is(err, commands.ErrReservationConflict):
 			slog.Warn("Conflict", "error", err)
-			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
+			httperr.AbortWithError(c, http.StatusConflict, err,
 				"Reservation conflict", nil)
 		case errors.Is(err, commands.ErrIdempotencyInProgress):
 			slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
-			httperr.AbortWithError(c, http.StatusAccepted, err, httperr.TypeConflict,
+			httperr.AbortWithError(c, http.StatusAccepted, err,
 				"Reservation request is currently being processed", map[string]string{"retry_after": "2"})
 		default:
 			slog.Error("Unexpected error in create reservation", "error", err)
-			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
 		return
@@ -134,7 +137,7 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		slog.Warn("Invalid reservation ID format", "id", idStr, "error", err)
-		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+		httperr.AbortWithError(c, http.StatusBadRequest, ErrInvalidReservationIDFormat,
 			"Invalid reservation ID format", nil)
 		return
 	}
@@ -146,11 +149,11 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 		switch {
 		case errors.Is(err, queries.ErrReservationNotFound):
 			slog.Warn("Reservation not found", "error", err)
-			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"Reservation not found", nil)
 		default:
 			slog.Error("Unexpected error in get reservation", "error", err)
-			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
 		return
@@ -180,7 +183,7 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 	if !ok {
 		slog.Error("Failed to get user ID from context")
 		httperr.AbortWithError(c, http.StatusInternalServerError,
-			errors.New("user context missing"), httperr.TypeInternal,
+			ErrMissingUserContext,
 			"Internal server error", nil)
 		return
 	}
@@ -188,7 +191,7 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 	reservationsRM, _, err := h.reservationQueries.ListByUser(c.Request.Context(), userID, nil, 50)
 	if err != nil {
 		slog.Error("Unexpected error in get user reservations", "user_id", userID, "error", err)
-		httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+		httperr.AbortWithError(c, http.StatusInternalServerError, err,
 			"Internal server error", nil)
 		return
 	}
@@ -204,12 +207,12 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 func (h *ReservationHandler) getIdempotencyKey(c *gin.Context) (uuid.UUID, error) {
 	keyStr := c.GetHeader("Idempotency-Key")
 	if keyStr == "" {
-		return uuid.Nil, commands.ErrIdempotencyKeyRequired
+		return uuid.Nil, ErrIdempotencyKeyRequired
 	}
 
 	key, err := uuid.Parse(keyStr)
 	if err != nil {
-		return uuid.Nil, errors.New("invalid idempotency key format")
+		return uuid.Nil, ErrInvalidIdempotencyKeyFormat
 	}
 
 	return key, nil

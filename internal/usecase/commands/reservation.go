@@ -29,7 +29,6 @@ var (
 	ErrInsufficientLeadTime    = errs.New("insufficient lead time")
 	ErrDuplicateReservation    = errs.New("duplicate reservation")
 	ErrReservationConflict     = errs.New("reservation conflict")
-	ErrIdempotencyKeyRequired  = errs.New("idempotency key required")
 	ErrInvalidCoupon           = errs.New("invalid coupon")
 	ErrIdempotencyInProgress   = errs.New("idempotency in progress")
 	ErrDomainValidation        = errs.New("domain validation error")

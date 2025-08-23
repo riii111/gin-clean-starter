@@ -45,7 +45,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req reqdto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.Warn("Invalid request format in login", "error", err)
-		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeValidation,
+		httperr.AbortWithError(c, http.StatusBadRequest, err,
 			"Invalid request format", nil)
 		return
 	}
@@ -53,7 +53,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	credentials, err := req.ToDomain()
 	if err != nil {
 		slog.Warn("Invalid request data in login", "error", err)
-		httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
+		httperr.AbortWithError(c, http.StatusBadRequest, err,
 			"Invalid request data", nil)
 		return
 	}
@@ -65,16 +65,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			errors.Is(err, usecase.ErrUserNotFound):
 			slog.Warn("Login failed due to invalid credentials",
 				"email", credentials.Email, "error", err)
-			httperr.AbortWithError(c, http.StatusUnauthorized, err, httperr.TypeAuth,
+			httperr.AbortWithError(c, http.StatusUnauthorized, err,
 				"Invalid email or password", nil)
 		case errors.Is(err, usecase.ErrUserInactive):
 			slog.Warn("Login failed due to inactive user",
 				"email", credentials.Email, "error", err)
-			httperr.AbortWithError(c, http.StatusForbidden, err, httperr.TypeAuth,
+			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
 			slog.Error("Unexpected error in login", "error", err)
-			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
 		return
@@ -114,8 +114,8 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	if !ok {
 		slog.Error("User ID not found in context")
 		httperr.AbortWithError(c, http.StatusInternalServerError,
-			errors.New("user_id not found in context"), httperr.TypeInternal,
-			"Authentication context error", nil)
+			errors.New("user_id not found in context"),
+			"Internal server error", nil)
 		return
 	}
 
@@ -124,15 +124,15 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		switch {
 		case errors.Is(err, usecase.ErrUserNotFound):
 			slog.Warn("User not found", "user_id", userID, "error", err)
-			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
+			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"User not found", nil)
 		case errors.Is(err, usecase.ErrUserInactive):
 			slog.Warn("User account is inactive", "user_id", userID, "error", err)
-			httperr.AbortWithError(c, http.StatusForbidden, err, httperr.TypeAuth,
+			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
 			slog.Error("Unexpected error in get current user", "user_id", userID, "error", err)
-			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
+			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
 		return
@@ -153,7 +153,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	if refreshToken == "" {
 		slog.Warn("Refresh token not found in cookie")
 		httperr.AbortWithError(c, http.StatusUnauthorized,
-			errors.New("refresh token not found in cookie"), httperr.TypeAuth,
+			errors.New("refresh token not found in cookie"),
 			"Refresh token not found", nil)
 		return
 	}
@@ -161,7 +161,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	pair, err := h.authUseCase.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		slog.Warn("Token refresh failed", "error", err)
-		httperr.AbortWithError(c, http.StatusUnauthorized, err, httperr.TypeAuth,
+		httperr.AbortWithError(c, http.StatusUnauthorized, err,
 			"Invalid or expired refresh token", nil)
 		return
 	}
