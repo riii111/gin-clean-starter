@@ -50,6 +50,10 @@ var RepositoryModule = fx.Module("repository",
 			fx.As(new(readstore.IdempotencyStore)),
 		),
 		// Query use cases for Handlers
+		fx.Annotate(
+			readstore.NewReservationReadStore,
+			fx.As(new(queries.ReservationReadStore)),
+		),
 		queries.NewReservationQueries,
 	),
 )
