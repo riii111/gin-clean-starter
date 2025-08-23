@@ -59,7 +59,7 @@ type CouponRepository interface {
 
 type IdempotencyRepository interface {
 	TryInsert(ctx context.Context, key uuid.UUID, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error
-	Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*queries.IdempotencyKeyView, error)
+	Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*IdempotencyRecord, error)
 	UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error
 }
 

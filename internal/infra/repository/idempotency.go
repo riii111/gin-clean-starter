@@ -7,7 +7,7 @@ import (
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/pgconv"
-	"gin-clean-starter/internal/usecase/queries"
+	"gin-clean-starter/internal/usecase/commands"
 
 	"github.com/google/uuid"
 )
@@ -48,7 +48,7 @@ func (r *IdempotencyRepository) TryInsert(ctx context.Context, key uuid.UUID, us
 	return nil
 }
 
-func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*queries.IdempotencyKeyView, error) {
+func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID uuid.UUID) (*commands.IdempotencyRecord, error) {
 	params := sqlc.GetIdempotencyKeyParams{
 		Key:    key,
 		UserID: userID,
@@ -62,14 +62,20 @@ func (r *IdempotencyRepository) Get(ctx context.Context, key uuid.UUID, userID u
 		return nil, infra.WrapRepoErr("failed to get idempotency key", err)
 	}
 
-	rm := toIdempotencyKeyViewFromRow(row)
+	record := &commands.IdempotencyRecord{
+		Key:                 row.Key,
+		UserID:              row.UserID,
+		Status:              row.Status,
+		RequestHash:         row.RequestHash,
+		ResultReservationID: pgconv.UUIDPtrFromPgtype(row.ResultReservationID),
+		ExpiresAt:           pgconv.TimeFromPgtype(row.ExpiresAt),
+	}
 
-	// Check if key has expired (treat as not found)
-	if time.Now().After(rm.ExpiresAt) {
+	if time.Now().After(record.ExpiresAt) {
 		return nil, infra.WrapRepoErr("idempotency key expired", nil, infra.KindNotFound)
 	}
 
-	return rm, nil
+	return record, nil
 }
 
 func (r *IdempotencyRepository) UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, responseBodyHash string, resultReservationID uuid.UUID) error {
@@ -95,21 +101,4 @@ func (r *IdempotencyRepository) DeleteExpired(ctx context.Context) (int64, error
 	}
 
 	return count, nil
-}
-
-func toIdempotencyKeyViewFromRow(row sqlc.IdempotencyKeys) *queries.IdempotencyKeyView {
-	rm := &queries.IdempotencyKeyView{
-		Key:                 row.Key,
-		UserID:              row.UserID,
-		Endpoint:            row.Endpoint,
-		RequestHash:         row.RequestHash,
-		Status:              row.Status,
-		ResponseBodyHash:    pgconv.StringPtrFromPgtype(row.ResponseBodyHash),
-		ResultReservationID: pgconv.UUIDPtrFromPgtype(row.ResultReservationID),
-		ExpiresAt:           pgconv.TimeFromPgtype(row.ExpiresAt),
-		CreatedAt:           pgconv.TimeFromPgtype(row.CreatedAt),
-		UpdatedAt:           pgconv.TimeFromPgtype(row.UpdatedAt),
-	}
-
-	return rm
 }

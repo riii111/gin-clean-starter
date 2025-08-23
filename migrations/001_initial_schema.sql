@@ -98,7 +98,7 @@ CREATE INDEX idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX idx_reservations_slot ON reservations USING gist(slot);
 CREATE INDEX idx_notification_jobs_status_run_at ON notification_jobs(status, run_at);
 CREATE INDEX idx_idempotency_keys_expires_at ON idempotency_keys(expires_at);
-CREATE INDEX idx_reservations_user_created_desc ON reservations (user_id, created_at DESC);
+CREATE INDEX idx_reservations_user_created_desc ON reservations (user_id, created_at DESC, id DESC);
 
 -- Insert initial data
 INSERT INTO companies (id, name) VALUES 

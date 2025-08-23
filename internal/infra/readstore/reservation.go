@@ -16,6 +16,7 @@ type ReservationViewQueries interface {
 	GetReservationByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReservationByIDRow, error)
 	GetReservationsByUserID(ctx context.Context, db sqlc.DBTX, userID uuid.UUID) ([]sqlc.GetReservationsByUserIDRow, error)
 	GetReservationsByUserIDPaginated(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDPaginatedParams) ([]sqlc.GetReservationsByUserIDPaginatedRow, error)
+	GetReservationsByUserIDFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDFirstPageParams) ([]sqlc.GetReservationsByUserIDFirstPageRow, error)
 	GetReservationsByUserIDKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDKeysetParams) ([]sqlc.GetReservationsByUserIDKeysetRow, error)
 }
 
@@ -139,6 +140,37 @@ func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uu
 	}
 
 	return result, nil
+}
+
+func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
+	params := sqlc.GetReservationsByUserIDFirstPageParams{
+		UserID: userID,
+		Limit:  limit,
+	}
+
+	rows, err := r.queries.GetReservationsByUserIDFirstPage(ctx, r.db, params)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to find reservations first page", err)
+	}
+
+	result := make([]*queries.ReservationListItem, len(rows))
+	for i, row := range rows {
+		result[i] = toReservationListItemFromUserFirstPageRow(row)
+	}
+
+	return result, nil
+}
+
+func toReservationListItemFromUserFirstPageRow(row sqlc.GetReservationsByUserIDFirstPageRow) *queries.ReservationListItem {
+	return &queries.ReservationListItem{
+		ID:           row.ID,
+		ResourceID:   row.ResourceID,
+		ResourceName: row.ResourceName,
+		Slot:         row.Slot,
+		Status:       row.Status,
+		PriceCents:   row.PriceCents,
+		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
+	}
 }
 
 func toReservationListItemFromUserKeysetRow(row sqlc.GetReservationsByUserIDKeysetRow) *queries.ReservationListItem {

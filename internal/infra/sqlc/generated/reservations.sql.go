@@ -174,6 +174,65 @@ func (q *Queries) GetReservationsByUserID(ctx context.Context, db DBTX, userID u
 	return items, nil
 }
 
+const getReservationsByUserIDFirstPage = `-- name: GetReservationsByUserIDFirstPage :many
+SELECT 
+    r.id,
+    r.resource_id,
+    r.slot,
+    r.status,
+    r.price_cents,
+    r.created_at,
+    res.name AS resource_name
+FROM reservations AS r
+INNER JOIN resources AS res ON r.resource_id = res.id
+WHERE r.user_id = $1
+ORDER BY r.created_at DESC, r.id DESC
+LIMIT $2
+`
+
+type GetReservationsByUserIDFirstPageParams struct {
+	UserID uuid.UUID `json:"user_id"`
+	Limit  int32     `json:"limit"`
+}
+
+type GetReservationsByUserIDFirstPageRow struct {
+	ID           uuid.UUID          `json:"id"`
+	ResourceID   uuid.UUID          `json:"resource_id"`
+	Slot         string             `json:"slot"`
+	Status       string             `json:"status"`
+	PriceCents   int32              `json:"price_cents"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ResourceName string             `json:"resource_name"`
+}
+
+func (q *Queries) GetReservationsByUserIDFirstPage(ctx context.Context, db DBTX, arg GetReservationsByUserIDFirstPageParams) ([]GetReservationsByUserIDFirstPageRow, error) {
+	rows, err := db.Query(ctx, getReservationsByUserIDFirstPage, arg.UserID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetReservationsByUserIDFirstPageRow
+	for rows.Next() {
+		var i GetReservationsByUserIDFirstPageRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceID,
+			&i.Slot,
+			&i.Status,
+			&i.PriceCents,
+			&i.CreatedAt,
+			&i.ResourceName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getReservationsByUserIDKeyset = `-- name: GetReservationsByUserIDKeyset :many
 SELECT 
     r.id,

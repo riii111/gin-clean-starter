@@ -6,27 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// ResourceView represents read-optimized resource data
-type ResourceView struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	LeadTimeMin int32     `json:"lead_time_min"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
-}
-
-// CouponView represents read-optimized coupon data
-type CouponView struct {
-	ID             uuid.UUID  `json:"id"`
-	Code           string     `json:"code"`
-	AmountOffCents *int32     `json:"amount_off_cents,omitempty"`
-	PercentOff     *float64   `json:"percent_off,omitempty"`
-	ValidFrom      *time.Time `json:"valid_from,omitempty"`
-	ValidTo        *time.Time `json:"valid_to,omitempty"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-}
-
 // AuthorizedUserView represents read-optimized user data with authorization info
 type AuthorizedUserView struct {
 	ID        uuid.UUID  `json:"id"`

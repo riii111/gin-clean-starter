@@ -6,7 +6,6 @@ import (
 
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
-	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,7 +13,6 @@ import (
 
 type NotificationWriteQueries interface {
 	CreateNotificationJob(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateNotificationJobParams) error
-	GetPendingNotificationJobs(ctx context.Context, db sqlc.DBTX, limit int32) ([]sqlc.NotificationJobs, error)
 	UpdateNotificationJobStatus(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateNotificationJobStatusParams) error
 }
 
@@ -47,20 +45,6 @@ func (r *NotificationRepository) CreateJob(ctx context.Context, tx sqlc.DBTX, ki
 	return nil
 }
 
-func (r *NotificationRepository) GetPendingJobs(ctx context.Context, limit int32) ([]*queries.NotificationJobView, error) {
-	rows, err := r.queries.GetPendingNotificationJobs(ctx, r.db, limit)
-	if err != nil {
-		return nil, infra.WrapRepoErr("failed to get pending notification jobs", err)
-	}
-
-	result := make([]*queries.NotificationJobView, len(rows))
-	for i, row := range rows {
-		result[i] = toNotificationJobViewFromRow(row)
-	}
-
-	return result, nil
-}
-
 func (r *NotificationRepository) UpdateJobStatus(ctx context.Context, tx sqlc.DBTX, jobID uuid.UUID, status string, lastError *string) error {
 	params := sqlc.UpdateNotificationJobStatusParams{
 		ID:     jobID,
@@ -79,24 +63,4 @@ func (r *NotificationRepository) UpdateJobStatus(ctx context.Context, tx sqlc.DB
 	}
 
 	return nil
-}
-
-func toNotificationJobViewFromRow(row sqlc.NotificationJobs) *queries.NotificationJobView {
-	rm := &queries.NotificationJobView{
-		ID:        row.ID,
-		Kind:      row.Kind,
-		Topic:     row.Topic,
-		Payload:   row.Payload,
-		RunAt:     row.RunAt.Time,
-		Attempts:  row.Attempts,
-		Status:    row.Status,
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
-	}
-
-	if row.LastError.Valid {
-		rm.LastError = &row.LastError.String
-	}
-
-	return rm
 }

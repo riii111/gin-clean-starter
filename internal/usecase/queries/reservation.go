@@ -53,22 +53,24 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 		limit = 50
 	}
 
-	var offset int32
-	var nextCursor *Cursor
+	var rows []*ReservationListItem
+	var err error
 
-	if after != nil && after.After != "" {
-		_, _, err := decodeCursor(after.After)
-		if err == nil {
-			// TODO: SQL layer keyset support - WHERE (created_at, id) < (?, ?)
-			offset = 0
+	if after == nil || after.After == "" {
+		rows, err = q.repo.FindByUserIDFirstPage(ctx, userID, int32(limit+1))
+	} else {
+		lastCreatedAt, lastID, decodeErr := decodeCursor(after.After)
+		if decodeErr != nil {
+			return nil, nil, decodeErr
 		}
+		rows, err = q.repo.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, int32(limit+1))
 	}
 
-	rows, err := q.repo.FindByUserIDPaginated(ctx, userID, int32(limit+1), offset)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	var nextCursor *Cursor
 	if len(rows) > limit {
 		lastItem := rows[limit-1]
 		nextCursor = &Cursor{
@@ -156,6 +158,8 @@ type ReservationReadStore interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*ReservationView, error)
 	FindByUserID(ctx context.Context, userID uuid.UUID) ([]*ReservationListItem, error)
 	FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*ReservationListItem, error)
+	FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
+	FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
 }
 
 type reservationQueriesImpl struct {
