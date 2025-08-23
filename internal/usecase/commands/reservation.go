@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"time"
 
@@ -14,32 +13,31 @@ import (
 	"gin-clean-starter/internal/domain/resource"
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/clock"
-	"gin-clean-starter/internal/pkg/errs"
+	domainerrs "gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Use shared domain errors from pkg/errs
 var (
-	ErrReservationNotFound    = errors.New("reservation not found")
-	ErrResourceNotFound       = errors.New("resource not found")
-	ErrCouponNotFound         = errors.New("coupon not found")
-	ErrInvalidTimeSlot        = errors.New("invalid time slot")
-	ErrInsufficientLeadTime   = errors.New("insufficient lead time")
-	ErrDuplicateReservation   = errors.New("duplicate reservation request")
-	ErrReservationConflict    = errors.New("time slot conflict")
-	ErrIdempotencyKeyRequired = errors.New("idempotency-key header required")
-	ErrInvalidCoupon          = errors.New("invalid or expired coupon")
-	ErrIdempotencyInProgress  = errors.New("idempotency request in progress")
-	ErrDomainValidation       = errors.New("domain validation failed")
-
-	// Error markers for categorization
-	ErrDomainValidationFailed  = errors.New("domain validation failed")
-	ErrIdempotencyCheckFailed  = errors.New("idempotency check failed")
-	ErrDatabaseOperationFailed = errors.New("database operation failed")
+	ErrReservationNotFound     = domainerrs.ErrReservationNotFound
+	ErrResourceNotFound        = domainerrs.ErrResourceNotFound
+	ErrCouponNotFound          = domainerrs.ErrCouponNotFound
+	ErrInvalidTimeSlot         = domainerrs.ErrInvalidTimeSlot
+	ErrInsufficientLeadTime    = domainerrs.ErrInsufficientLeadTime
+	ErrDuplicateReservation    = domainerrs.ErrDuplicateReservation
+	ErrReservationConflict     = domainerrs.ErrReservationConflict
+	ErrIdempotencyKeyRequired  = domainerrs.ErrIdempotencyKeyRequired
+	ErrInvalidCoupon           = domainerrs.ErrInvalidCoupon
+	ErrIdempotencyInProgress   = domainerrs.ErrIdempotencyInProgress
+	ErrDomainValidation        = domainerrs.ErrDomainValidation
+	ErrDomainValidationFailed  = domainerrs.ErrDomainValidationFailed
+	ErrIdempotencyCheckFailed  = domainerrs.ErrIdempotencyCheckFailed
+	ErrDatabaseOperationFailed = domainerrs.ErrDatabaseOperationFailed
 )
 
 type CreateReservationResult struct {
@@ -48,15 +46,15 @@ type CreateReservationResult struct {
 }
 
 type ReservationRepository interface {
-	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (*queries.ReservationView, error)
+	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (uuid.UUID, error)
 }
 
 type ResourceRepository interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*queries.ResourceView, error)
+	FindByID(ctx context.Context, id uuid.UUID) (*ResourceSnapshot, error)
 }
 
 type CouponRepository interface {
-	FindByCode(ctx context.Context, code string) (*queries.CouponView, error)
+	FindByCode(ctx context.Context, code string) (*CouponSnapshot, error)
 }
 
 type IdempotencyRepository interface {
@@ -146,21 +144,21 @@ func (r *reservationUseCaseImpl) handleIdempotency(
 	expiresAt time.Time,
 ) (*queries.ReservationView, error) {
 	if err := r.idempotencyRepo.TryInsert(ctx, idempotencyKey, userID, "POST /reservations", requestHash, expiresAt); err != nil {
-		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
+		return nil, domainerrs.Mark(err, ErrIdempotencyCheckFailed)
 	}
 
 	existing, err := r.idempotencyRepo.Get(ctx, idempotencyKey, userID)
 	if err != nil {
-		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
+		return nil, domainerrs.Mark(err, ErrIdempotencyCheckFailed)
 	}
 
 	switch existing.Status {
 	case "completed":
 		if existing.ResultReservationID != nil {
-			dummyActor := uuid.New() // TODO: pass actual actor if needed
-			return r.reservationQueries.GetByID(ctx, dummyActor, *existing.ResultReservationID)
+			// Use system-level access for idempotency replay
+			return r.reservationQueries.GetByIDSystem(ctx, *existing.ResultReservationID)
 		}
-		return nil, errs.New("completed request missing result reservation ID")
+		return nil, domainerrs.New("completed request missing result reservation ID")
 
 	case "processing":
 		if existing.RequestHash != requestHash {
@@ -169,7 +167,7 @@ func (r *reservationUseCaseImpl) handleIdempotency(
 		return nil, ErrIdempotencyInProgress
 
 	default:
-		return nil, errs.New("invalid idempotency key status")
+		return nil, domainerrs.New("invalid idempotency key status")
 	}
 }
 
@@ -190,7 +188,7 @@ func (r *reservationUseCaseImpl) createNewReservation(
 
 	domainData, err := req.ToDomain()
 	if err != nil {
-		return nil, errs.Mark(err, ErrInvalidTimeSlot)
+		return nil, domainerrs.Mark(err, ErrInvalidTimeSlot)
 	}
 
 	reservationEntity, err := r.reservationFactory.CreateReservation(
@@ -201,7 +199,7 @@ func (r *reservationUseCaseImpl) createNewReservation(
 		domainData.Note,
 	)
 	if err != nil {
-		return nil, errs.Mark(err, ErrDomainValidation)
+		return nil, domainerrs.Mark(err, ErrDomainValidation)
 	}
 
 	return r.executeReservationTransaction(ctx, reservationEntity, idempotencyKey, userID)
@@ -214,7 +212,7 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 ) (*queries.ReservationView, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+		return nil, domainerrs.Mark(err, ErrDatabaseOperationFailed)
 	}
 	defer func() {
 		if rollbackErr := tx.Rollback(ctx); rollbackErr != nil {
@@ -222,26 +220,33 @@ func (r *reservationUseCaseImpl) executeReservationTransaction(
 		}
 	}()
 
-	reservationView, err := r.reservationRepo.Create(ctx, tx, reservationEntity)
+	reservationID, err := r.reservationRepo.Create(ctx, tx, reservationEntity)
 	if err != nil {
 		if infra.IsKind(err, infra.KindConflict) {
 			return nil, ErrReservationConflict
 		}
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+		return nil, domainerrs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	if notificationErr := r.createNotificationJob(ctx, tx, reservationView); notificationErr != nil {
-		return nil, errs.Mark(notificationErr, ErrDatabaseOperationFailed)
+	if notificationErr := r.createNotificationJobByID(ctx, tx, reservationID); notificationErr != nil {
+		return nil, domainerrs.Mark(notificationErr, ErrDatabaseOperationFailed)
 	}
 
-	responseBodyHash := r.calculateResponseHash(reservationView)
-	err = r.idempotencyRepo.UpdateStatusCompleted(ctx, tx, idempotencyKey, userID, responseBodyHash, reservationView.ID)
+	// Placeholder for response hash until we read the full data
+	tempHash := r.calculateIDHash(reservationID)
+	err = r.idempotencyRepo.UpdateStatusCompleted(ctx, tx, idempotencyKey, userID, tempHash, reservationID)
 	if err != nil {
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+		return nil, domainerrs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
+	if commitErr := tx.Commit(ctx); commitErr != nil {
+		return nil, domainerrs.Mark(commitErr, ErrDatabaseOperationFailed)
+	}
+
+	// Read-after-write: Get the complete reservation view from read store
+	reservationView, err := r.reservationQueries.GetByIDSystem(ctx, reservationID)
+	if err != nil {
+		return nil, domainerrs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
 	return reservationView, nil
@@ -256,10 +261,10 @@ func (r *reservationUseCaseImpl) validateAndGetResource(
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrResourceNotFound
 		}
-		return nil, errs.Wrap(err, "failed to find resource")
+		return nil, domainerrs.Wrap(err, "failed to find resource")
 	}
 
-	return resource.NewResource(resourceRM.ID, resourceRM.Name, int(resourceRM.LeadTimeMin))
+	return resource.NewResource(resourceRM.ID, resourceRM.Name, resourceRM.LeadTimeMin)
 }
 
 func (r *reservationUseCaseImpl) validateAndGetCoupon(
@@ -275,7 +280,7 @@ func (r *reservationUseCaseImpl) validateAndGetCoupon(
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrCouponNotFound
 		}
-		return nil, errs.Wrap(err, "failed to find coupon")
+		return nil, domainerrs.Wrap(err, "failed to find coupon")
 	}
 
 	couponEntity, err := coupon.NewCoupon(
@@ -287,7 +292,7 @@ func (r *reservationUseCaseImpl) validateAndGetCoupon(
 		couponRM.ValidTo,
 	)
 	if err != nil {
-		return nil, errs.Wrap(err, "failed to create coupon")
+		return nil, domainerrs.Wrap(err, "failed to create coupon")
 	}
 
 	if err := couponEntity.ValidateUsage(r.clock.Now()); err != nil {
@@ -297,16 +302,15 @@ func (r *reservationUseCaseImpl) validateAndGetCoupon(
 	return couponEntity, nil
 }
 
-func (r *reservationUseCaseImpl) createNotificationJob(
+func (r *reservationUseCaseImpl) createNotificationJobByID(
 	ctx context.Context,
 	tx sqlc.DBTX,
-	reservationView *queries.ReservationView,
+	reservationID uuid.UUID,
 ) error {
+	// Simple notification job with minimal data until we read the full reservation
 	notificationPayload, err := json.Marshal(map[string]any{
-		"reservation_id": reservationView.ID,
-		"user_email":     reservationView.UserEmail,
-		"resource_name":  reservationView.ResourceName,
-		"slot":           reservationView.Slot,
+		"reservation_id": reservationID,
+		"type":           "reservation_created",
 	})
 	if err != nil {
 		return err
@@ -321,8 +325,7 @@ func (r *reservationUseCaseImpl) calculateRequestHash(req reqdto.CreateReservati
 	return hex.EncodeToString(hash[:])
 }
 
-func (r *reservationUseCaseImpl) calculateResponseHash(reservationView *queries.ReservationView) string {
-	data, _ := json.Marshal(reservationView)
-	hash := sha256.Sum256(data)
+func (r *reservationUseCaseImpl) calculateIDHash(id uuid.UUID) string {
+	hash := sha256.Sum256([]byte(id.String()))
 	return hex.EncodeToString(hash[:])
 }

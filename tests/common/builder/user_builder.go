@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/domain/user"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"

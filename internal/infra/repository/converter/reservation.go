@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/domain/reservation"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )

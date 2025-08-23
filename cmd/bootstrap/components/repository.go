@@ -1,9 +1,9 @@
 package components
 
 import (
-	"gin-clean-starter/internal/infra/readrepo"
-	"gin-clean-starter/internal/infra/sqlc"
-	repo_impl "gin-clean-starter/internal/infra/writerepo"
+	"gin-clean-starter/internal/infra/readstore"
+	repo_impl "gin-clean-starter/internal/infra/repository"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/usecase"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
@@ -42,8 +42,8 @@ var RepositoryModule = fx.Module("repository",
 		),
 		// Read-side repository for queries
 		fx.Annotate(
-			readrepo.NewReservationViewRepository,
-			fx.As(new(queries.ReservationViewRepo)),
+			readstore.NewReservationReadStore,
+			fx.As(new(queries.ReservationReadStore)),
 		),
 		// Read-side use case
 		queries.NewReservationQueries,

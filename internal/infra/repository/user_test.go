@@ -1,6 +1,6 @@
 //go:build unit
 
-package writerepo
+package repository
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/tests/common/builder"
 
 	"github.com/google/uuid"

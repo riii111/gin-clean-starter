@@ -10,6 +10,7 @@ import (
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
+	domainerrs "gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
 
@@ -73,39 +74,39 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	result, err := h.reservationCommands.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
 	if err != nil {
 		switch {
-		case errors.Is(err, commands.ErrResourceNotFound):
+		case errors.Is(err, domainerrs.ErrResourceNotFound):
 			slog.Warn("Resource not found", "resource_id", req.ResourceID, "error", err)
 			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
 				"Resource not found", nil)
-		case errors.Is(err, commands.ErrCouponNotFound):
+		case errors.Is(err, domainerrs.ErrCouponNotFound):
 			slog.Warn("Coupon not found", "coupon_code", req.GetCouponCode(), "error", err)
 			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
 				"Coupon not found", nil)
-		case errors.Is(err, commands.ErrInvalidTimeSlot):
+		case errors.Is(err, domainerrs.ErrInvalidTimeSlot):
 			slog.Warn("Invalid time slot", "start_time", req.StartTime, "end_time", req.EndTime, "error", err)
 			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
 				"Invalid time slot", nil)
-		case errors.Is(err, commands.ErrInsufficientLeadTime):
+		case errors.Is(err, domainerrs.ErrInsufficientLeadTime):
 			slog.Warn("Insufficient lead time", "start_time", req.StartTime, "error", err)
 			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
 				"Insufficient lead time for reservation", nil)
-		case errors.Is(err, commands.ErrInvalidCoupon):
+		case errors.Is(err, domainerrs.ErrInvalidCoupon):
 			slog.Warn("Invalid or expired coupon", "coupon_code", req.GetCouponCode(), "error", err)
 			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
 				"Invalid or expired coupon", nil)
-		case errors.Is(err, commands.ErrDuplicateReservation):
+		case errors.Is(err, domainerrs.ErrDuplicateReservation):
 			slog.Warn("Duplicate reservation request", "idempotency_key", idempotencyKey, "error", err)
 			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
 				"Duplicate reservation request with different parameters", nil)
-		case errors.Is(err, commands.ErrReservationConflict):
+		case errors.Is(err, domainerrs.ErrReservationConflict):
 			slog.Warn("Time slot conflict", "resource_id", req.ResourceID, "start_time", req.StartTime, "error", err)
 			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
 				"Time slot is already reserved", nil)
-		case errors.Is(err, commands.ErrIdempotencyInProgress):
+		case errors.Is(err, domainerrs.ErrIdempotencyInProgress):
 			slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
 			httperr.AbortWithError(c, http.StatusAccepted, err, httperr.TypeConflict,
 				"Reservation request is currently being processed", map[string]string{"retry_after": "2"})
-		case errors.Is(err, commands.ErrDomainValidation):
+		case errors.Is(err, domainerrs.ErrDomainValidation):
 			slog.Warn("Domain validation failed", "user_id", userID, "error", err)
 			httperr.AbortWithError(c, http.StatusUnprocessableEntity, err, httperr.TypeValidation,
 				"Domain validation failed", nil)
@@ -154,7 +155,7 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 	reservationRM, err := h.reservationQueries.GetByID(c.Request.Context(), actorID, id)
 	if err != nil {
 		switch {
-		case errors.Is(err, commands.ErrReservationNotFound):
+		case errors.Is(err, domainerrs.ErrReservationNotFound):
 			slog.Info("Reservation not found", "id", id)
 			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
 				"Reservation not found", nil)
@@ -214,7 +215,7 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 func (h *ReservationHandler) getIdempotencyKey(c *gin.Context) (uuid.UUID, error) {
 	keyStr := c.GetHeader("Idempotency-Key")
 	if keyStr == "" {
-		return uuid.Nil, commands.ErrIdempotencyKeyRequired
+		return uuid.Nil, domainerrs.ErrIdempotencyKeyRequired
 	}
 
 	key, err := uuid.Parse(keyStr)

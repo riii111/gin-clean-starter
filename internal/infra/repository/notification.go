@@ -1,25 +1,25 @@
-package writerepo
+package repository
 
 import (
 	"context"
 	"time"
 
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type NotificationQueries interface {
+type NotificationWriteQueries interface {
 	CreateNotificationJob(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateNotificationJobParams) error
 	GetPendingNotificationJobs(ctx context.Context, db sqlc.DBTX, limit int32) ([]sqlc.NotificationJobs, error)
 	UpdateNotificationJobStatus(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateNotificationJobStatusParams) error
 }
 
 type NotificationRepository struct {
-	queries NotificationQueries
+	queries NotificationWriteQueries
 	db      sqlc.DBTX
 }
 

@@ -1,11 +1,12 @@
-package readrepo
+package readstore
 
 import (
 	"context"
+	"time"
 
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/pgconv"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/pkg/pgconv"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
@@ -15,21 +16,22 @@ type ReservationViewQueries interface {
 	GetReservationByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReservationByIDRow, error)
 	GetReservationsByUserID(ctx context.Context, db sqlc.DBTX, userID uuid.UUID) ([]sqlc.GetReservationsByUserIDRow, error)
 	GetReservationsByUserIDPaginated(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDPaginatedParams) ([]sqlc.GetReservationsByUserIDPaginatedRow, error)
+	GetReservationsByUserIDKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDKeysetParams) ([]sqlc.GetReservationsByUserIDKeysetRow, error)
 }
 
-type ReservationViewRepository struct {
+type ReservationReadStore struct {
 	queries ReservationViewQueries
 	db      sqlc.DBTX
 }
 
-func NewReservationViewRepository(queries *sqlc.Queries, db sqlc.DBTX) *ReservationViewRepository {
-	return &ReservationViewRepository{
+func NewReservationReadStore(queries *sqlc.Queries, db sqlc.DBTX) *ReservationReadStore {
+	return &ReservationReadStore{
 		queries: queries,
 		db:      db,
 	}
 }
 
-func (r *ReservationViewRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error) {
+func (r *ReservationReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error) {
 	row, err := r.queries.GetReservationByID(ctx, r.db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -38,10 +40,10 @@ func (r *ReservationViewRepository) FindByID(ctx context.Context, id uuid.UUID) 
 		return nil, infra.WrapRepoErr("failed to find reservation by ID", err)
 	}
 
-	return toReservationViewFromDetailRow(row), nil
+	return rowToReservationView(row), nil
 }
 
-func (r *ReservationViewRepository) FindByUserID(ctx context.Context, userID uuid.UUID) ([]*queries.ReservationListItem, error) {
+func (r *ReservationReadStore) FindByUserID(ctx context.Context, userID uuid.UUID) ([]*queries.ReservationListItem, error) {
 	rows, err := r.queries.GetReservationsByUserID(ctx, r.db, userID)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to find reservations by user ID", err)
@@ -55,7 +57,7 @@ func (r *ReservationViewRepository) FindByUserID(ctx context.Context, userID uui
 	return result, nil
 }
 
-func (r *ReservationViewRepository) FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*queries.ReservationListItem, error) {
+func (r *ReservationReadStore) FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*queries.ReservationListItem, error) {
 	params := sqlc.GetReservationsByUserIDPaginatedParams{
 		UserID: userID,
 		Limit:  limit,
@@ -75,7 +77,7 @@ func (r *ReservationViewRepository) FindByUserIDPaginated(ctx context.Context, u
 	return result, nil
 }
 
-func toReservationViewFromDetailRow(row sqlc.GetReservationByIDRow) *queries.ReservationView {
+func rowToReservationView(row sqlc.GetReservationByIDRow) *queries.ReservationView {
 	return &queries.ReservationView{
 		ID:           row.ID,
 		ResourceID:   row.ResourceID,
@@ -106,6 +108,40 @@ func toReservationListItemFromUserRow(row sqlc.GetReservationsByUserIDRow) *quer
 }
 
 func toReservationListItemFromUserPaginatedRow(row sqlc.GetReservationsByUserIDPaginatedRow) *queries.ReservationListItem {
+	return &queries.ReservationListItem{
+		ID:           row.ID,
+		ResourceID:   row.ResourceID,
+		ResourceName: row.ResourceName,
+		Slot:         row.Slot,
+		Status:       row.Status,
+		PriceCents:   row.PriceCents,
+		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
+	}
+}
+
+// FindByUserIDKeyset finds reservations by user ID using keyset pagination
+func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
+	params := sqlc.GetReservationsByUserIDKeysetParams{
+		UserID:    userID,
+		CreatedAt: pgconv.TimeToPgtype(lastCreatedAt),
+		ID:        lastID,
+		Limit:     limit,
+	}
+
+	rows, err := r.queries.GetReservationsByUserIDKeyset(ctx, r.db, params)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to find reservations by user ID with keyset", err)
+	}
+
+	result := make([]*queries.ReservationListItem, len(rows))
+	for i, row := range rows {
+		result[i] = toReservationListItemFromUserKeysetRow(row)
+	}
+
+	return result, nil
+}
+
+func toReservationListItemFromUserKeysetRow(row sqlc.GetReservationsByUserIDKeysetRow) *queries.ReservationListItem {
 	return &queries.ReservationListItem{
 		ID:           row.ID,
 		ResourceID:   row.ResourceID,

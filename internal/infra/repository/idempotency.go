@@ -1,18 +1,18 @@
-package writerepo
+package repository
 
 import (
 	"context"
 	"time"
 
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/pgconv"
-	"gin-clean-starter/internal/infra/sqlc"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/pkg/pgconv"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
 
-type IdempotencyQueries interface {
+type IdempotencyWriteQueries interface {
 	TryInsertIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.TryInsertIdempotencyKeyParams) error
 	GetIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.GetIdempotencyKeyParams) (sqlc.IdempotencyKeys, error)
 	UpdateIdempotencyKeyCompleted(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateIdempotencyKeyCompletedParams) error
@@ -20,7 +20,7 @@ type IdempotencyQueries interface {
 }
 
 type IdempotencyRepository struct {
-	queries IdempotencyQueries
+	queries IdempotencyWriteQueries
 	db      sqlc.DBTX
 }
 

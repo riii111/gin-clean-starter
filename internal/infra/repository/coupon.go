@@ -1,23 +1,23 @@
-package writerepo
+package repository
 
 import (
 	"context"
 
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/pgconv"
-	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/queries"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/pkg/pgconv"
+	"gin-clean-starter/internal/usecase/commands"
 
 	"github.com/google/uuid"
 )
 
-type CouponQueries interface {
+type CouponWriteQueries interface {
 	GetCouponByCode(ctx context.Context, db sqlc.DBTX, code string) (sqlc.Coupons, error)
 	GetCouponByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.Coupons, error)
 }
 
 type CouponRepository struct {
-	queries CouponQueries
+	queries CouponWriteQueries
 	db      sqlc.DBTX
 }
 
@@ -28,7 +28,7 @@ func NewCouponRepository(queries *sqlc.Queries, db sqlc.DBTX) *CouponRepository 
 	}
 }
 
-func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*queries.CouponView, error) {
+func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*commands.CouponSnapshot, error) {
 	row, err := r.queries.GetCouponByCode(ctx, r.db, code)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -37,14 +37,14 @@ func (r *CouponRepository) FindByCode(ctx context.Context, code string) (*querie
 		return nil, infra.WrapRepoErr("failed to find coupon by code", err)
 	}
 
-	rm, err := toCouponViewFromRow(row)
+	rm, err := toCouponSnapshotFromRow(row)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
 	}
 	return rm, nil
 }
 
-func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.CouponView, error) {
+func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*commands.CouponSnapshot, error) {
 	row, err := r.queries.GetCouponByID(ctx, r.db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
@@ -53,19 +53,17 @@ func (r *CouponRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries
 		return nil, infra.WrapRepoErr("failed to find coupon by ID", err)
 	}
 
-	rm, err := toCouponViewFromRow(row)
+	rm, err := toCouponSnapshotFromRow(row)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to convert coupon row", err)
 	}
 	return rm, nil
 }
 
-func toCouponViewFromRow(row sqlc.Coupons) (*queries.CouponView, error) {
-	rm := &queries.CouponView{
-		ID:        row.ID,
-		Code:      row.Code,
-		CreatedAt: row.CreatedAt.Time,
-		UpdatedAt: row.UpdatedAt.Time,
+func toCouponSnapshotFromRow(row sqlc.Coupons) (*commands.CouponSnapshot, error) {
+	rm := &commands.CouponSnapshot{
+		ID:   row.ID,
+		Code: row.Code,
 	}
 
 	if row.AmountOffCents.Valid {
