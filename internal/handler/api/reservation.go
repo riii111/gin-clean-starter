@@ -10,7 +10,7 @@ import (
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
-	domainerrs "gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
 
@@ -18,12 +18,16 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	ErrMissingUserContext = errs.New("user context missing")
+)
+
 type ReservationHandler struct {
-	reservationCommands commands.ReservationUseCase
+	reservationCommands commands.ReservationCommands
 	reservationQueries  queries.ReservationQueries
 }
 
-func NewReservationHandler(reservationCommands commands.ReservationUseCase, reservationQueries queries.ReservationQueries) *ReservationHandler {
+func NewReservationHandler(reservationCommands commands.ReservationCommands, reservationQueries queries.ReservationQueries) *ReservationHandler {
 	return &ReservationHandler{
 		reservationCommands: reservationCommands,
 		reservationQueries:  reservationQueries,
@@ -74,42 +78,27 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 	result, err := h.reservationCommands.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
 	if err != nil {
 		switch {
-		case errors.Is(err, domainerrs.ErrResourceNotFound):
-			slog.Warn("Resource not found", "resource_id", req.ResourceID, "error", err)
+		case errors.Is(err, commands.ErrResourceNotFound),
+			errors.Is(err, commands.ErrCouponNotFound):
+			slog.Warn("Resource not found", "error", err)
 			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
 				"Resource not found", nil)
-		case errors.Is(err, domainerrs.ErrCouponNotFound):
-			slog.Warn("Coupon not found", "coupon_code", req.GetCouponCode(), "error", err)
-			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
-				"Coupon not found", nil)
-		case errors.Is(err, domainerrs.ErrInvalidTimeSlot):
-			slog.Warn("Invalid time slot", "start_time", req.StartTime, "end_time", req.EndTime, "error", err)
+		case errors.Is(err, commands.ErrInvalidTimeSlot),
+			errors.Is(err, commands.ErrInsufficientLeadTime),
+			errors.Is(err, commands.ErrInvalidCoupon),
+			errors.Is(err, commands.ErrDomainValidation):
+			slog.Warn("Bad request", "error", err)
 			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
-				"Invalid time slot", nil)
-		case errors.Is(err, domainerrs.ErrInsufficientLeadTime):
-			slog.Warn("Insufficient lead time", "start_time", req.StartTime, "error", err)
-			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
-				"Insufficient lead time for reservation", nil)
-		case errors.Is(err, domainerrs.ErrInvalidCoupon):
-			slog.Warn("Invalid or expired coupon", "coupon_code", req.GetCouponCode(), "error", err)
-			httperr.AbortWithError(c, http.StatusBadRequest, err, httperr.TypeBadRequest,
-				"Invalid or expired coupon", nil)
-		case errors.Is(err, domainerrs.ErrDuplicateReservation):
-			slog.Warn("Duplicate reservation request", "idempotency_key", idempotencyKey, "error", err)
+				"Invalid request parameters", nil)
+		case errors.Is(err, commands.ErrDuplicateReservation),
+			errors.Is(err, commands.ErrReservationConflict):
+			slog.Warn("Conflict", "error", err)
 			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
-				"Duplicate reservation request with different parameters", nil)
-		case errors.Is(err, domainerrs.ErrReservationConflict):
-			slog.Warn("Time slot conflict", "resource_id", req.ResourceID, "start_time", req.StartTime, "error", err)
-			httperr.AbortWithError(c, http.StatusConflict, err, httperr.TypeConflict,
-				"Time slot is already reserved", nil)
-		case errors.Is(err, domainerrs.ErrIdempotencyInProgress):
+				"Reservation conflict", nil)
+		case errors.Is(err, commands.ErrIdempotencyInProgress):
 			slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
 			httperr.AbortWithError(c, http.StatusAccepted, err, httperr.TypeConflict,
 				"Reservation request is currently being processed", map[string]string{"retry_after": "2"})
-		case errors.Is(err, domainerrs.ErrDomainValidation):
-			slog.Warn("Domain validation failed", "user_id", userID, "error", err)
-			httperr.AbortWithError(c, http.StatusUnprocessableEntity, err, httperr.TypeValidation,
-				"Domain validation failed", nil)
 		default:
 			slog.Error("Unexpected error in create reservation", "error", err)
 			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
@@ -155,12 +144,12 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 	reservationRM, err := h.reservationQueries.GetByID(c.Request.Context(), actorID, id)
 	if err != nil {
 		switch {
-		case errors.Is(err, domainerrs.ErrReservationNotFound):
-			slog.Info("Reservation not found", "id", id)
+		case errors.Is(err, queries.ErrReservationNotFound):
+			slog.Warn("Reservation not found", "error", err)
 			httperr.AbortWithError(c, http.StatusNotFound, err, httperr.TypeNotFound,
 				"Reservation not found", nil)
 		default:
-			slog.Error("Unexpected error in get reservation", "id", id, "error", err)
+			slog.Error("Unexpected error in get reservation", "error", err)
 			httperr.AbortWithError(c, http.StatusInternalServerError, err, httperr.TypeInternal,
 				"Internal server error", nil)
 		}
@@ -215,7 +204,7 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 func (h *ReservationHandler) getIdempotencyKey(c *gin.Context) (uuid.UUID, error) {
 	keyStr := c.GetHeader("Idempotency-Key")
 	if keyStr == "" {
-		return uuid.Nil, domainerrs.ErrIdempotencyKeyRequired
+		return uuid.Nil, commands.ErrIdempotencyKeyRequired
 	}
 
 	key, err := uuid.Parse(keyStr)

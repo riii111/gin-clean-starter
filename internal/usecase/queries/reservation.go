@@ -7,9 +7,13 @@ import (
 	"strings"
 	"time"
 
-	domainerrs "gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/pkg/errs"
 
 	"github.com/google/uuid"
+)
+
+var (
+	ErrReservationNotFound = errs.New("reservation not found")
 )
 
 const (
@@ -37,12 +41,12 @@ func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, i
 func (q *reservationQueriesImpl) GetByIDWithRole(ctx context.Context, actorID uuid.UUID, actorRole string, id uuid.UUID) (*ReservationView, error) {
 	reservation, err := q.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, errs.Mark(err, ErrReservationNotFound)
 	}
 
 	if !canAccessReservation(actorID, actorRole, reservation) {
 		// Return not found to avoid information leakage
-		return nil, domainerrs.ErrReservationNotFound
+		return nil, ErrReservationNotFound
 	}
 
 	return reservation, nil
@@ -67,7 +71,7 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 	}
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errs.Mark(err, ErrReservationNotFound)
 	}
 
 	var nextCursor *Cursor
@@ -87,7 +91,11 @@ func (q *reservationQueriesImpl) GenerateETag(reservation *ReservationView) stri
 }
 
 func (q *reservationQueriesImpl) GetByIDSystem(ctx context.Context, id uuid.UUID) (*ReservationView, error) {
-	return q.repo.FindByID(ctx, id)
+	reservation, err := q.repo.FindByID(ctx, id)
+	if err != nil {
+		return nil, errs.Mark(err, ErrReservationNotFound)
+	}
+	return reservation, nil
 }
 
 func encodeCursor(createdAt time.Time, id uuid.UUID) string {
