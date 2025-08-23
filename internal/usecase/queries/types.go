@@ -29,6 +29,27 @@ type IdempotencyKeyView struct {
 	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
+// ResourceView represents read-optimized resource data
+type ResourceView struct {
+	ID          uuid.UUID `json:"id"`
+	Name        string    `json:"name"`
+	LeadTimeMin int32     `json:"lead_time_min"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// CouponView represents read-optimized coupon data
+type CouponView struct {
+	ID             uuid.UUID  `json:"id"`
+	Code           string     `json:"code"`
+	AmountOffCents *int32     `json:"amount_off_cents,omitempty"`
+	PercentOff     *float64   `json:"percent_off,omitempty"`
+	ValidFrom      time.Time  `json:"valid_from"`
+	ValidTo        *time.Time `json:"valid_to,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
 // NotificationJobView represents read-optimized notification job data
 type NotificationJobView struct {
 	ID        uuid.UUID `json:"id"`

@@ -35,19 +35,19 @@ var RepositoryModule = fx.Module("repository",
 		// Read-side stores for Command layer
 		fx.Annotate(
 			readstore.NewReservationReadStore,
-			fx.As(new(readstore.ReservationStore)),
+			fx.As(new(commands.ReservationStore)),
 		),
 		fx.Annotate(
 			readstore.NewResourceReadStore,
-			fx.As(new(readstore.ResourceStore)),
+			fx.As(new(commands.ResourceStore)),
 		),
 		fx.Annotate(
 			readstore.NewCouponReadStore,
-			fx.As(new(readstore.CouponStore)),
+			fx.As(new(commands.CouponStore)),
 		),
 		fx.Annotate(
 			readstore.NewIdempotencyReadStore,
-			fx.As(new(readstore.IdempotencyStore)),
+			fx.As(new(commands.IdempotencyStore)),
 		),
 		// Query use cases for Handlers
 		fx.Annotate(

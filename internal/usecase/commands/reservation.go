@@ -12,7 +12,6 @@ import (
 	"gin-clean-starter/internal/domain/resource"
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/readstore"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/clock"
 	"gin-clean-starter/internal/pkg/errs"
@@ -64,32 +63,48 @@ type NotificationRepository interface {
 	CreateJob(ctx context.Context, tx sqlc.DBTX, kind, topic string, payload []byte, runAt time.Time) error
 }
 
+type ResourceStore interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*shared.ResourceSnapshot, error)
+}
+
+type CouponStore interface {
+	FindByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error)
+}
+
+type IdempotencyStore interface {
+	Get(ctx context.Context, tx sqlc.DBTX, key, userID uuid.UUID) (*shared.IdempotencyRecord, error)
+}
+
+type ReservationStore interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error)
+}
+
 type ReservationCommands interface {
 	CreateReservation(ctx context.Context, req reqdto.CreateReservationRequest, userID uuid.UUID, idempotencyKey uuid.UUID) (*CreateReservationResult, error)
 }
 
 type reservationUseCaseImpl struct {
 	reservationRepo    ReservationRepository
-	resourceStore      readstore.ResourceStore
-	couponStore        readstore.CouponStore
+	resourceStore      ResourceStore
+	couponStore        CouponStore
 	idempotencyRepo    IdempotencyRepository
-	idempotencyStore   readstore.IdempotencyStore
+	idempotencyStore   IdempotencyStore
 	notificationRepo   NotificationRepository
 	reservationFactory *reservation.Factory
-	reservationStore   readstore.ReservationStore
+	reservationStore   ReservationStore
 	db                 *pgxpool.Pool
 	clock              clock.Clock
 }
 
 func NewReservationUseCase(
 	reservationRepo ReservationRepository,
-	resourceStore readstore.ResourceStore,
-	couponStore readstore.CouponStore,
+	resourceStore ResourceStore,
+	couponStore CouponStore,
 	idempotencyRepo IdempotencyRepository,
-	idempotencyStore readstore.IdempotencyStore,
+	idempotencyStore IdempotencyStore,
 	notificationRepo NotificationRepository,
 	reservationFactory *reservation.Factory,
-	reservationStore readstore.ReservationStore,
+	reservationStore ReservationStore,
 	db *pgxpool.Pool,
 	clock clock.Clock,
 ) ReservationCommands {
