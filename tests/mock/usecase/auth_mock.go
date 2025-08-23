@@ -12,8 +12,9 @@ package usecasemock
 import (
 	context "context"
 	user "gin-clean-starter/internal/domain/user"
+	request "gin-clean-starter/internal/handler/dto/request"
 	usecase "gin-clean-starter/internal/usecase"
-	readmodel "gin-clean-starter/internal/usecase/readmodel"
+	queries "gin-clean-starter/internal/usecase/queries"
 	reflect "reflect"
 
 	uuid "github.com/google/uuid"
@@ -45,10 +46,10 @@ func (m *MockUserRepository) EXPECT() *MockUserRepositoryMockRecorder {
 }
 
 // FindByEmail mocks base method.
-func (m *MockUserRepository) FindByEmail(ctx context.Context, email user.Email) (*readmodel.AuthorizedUserRM, string, error) {
+func (m *MockUserRepository) FindByEmail(ctx context.Context, email user.Email) (*queries.AuthorizedUserView, string, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByEmail", ctx, email)
-	ret0, _ := ret[0].(*readmodel.AuthorizedUserRM)
+	ret0, _ := ret[0].(*queries.AuthorizedUserView)
 	ret1, _ := ret[1].(string)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -61,10 +62,10 @@ func (mr *MockUserRepositoryMockRecorder) FindByEmail(ctx, email any) *gomock.Ca
 }
 
 // FindByID mocks base method.
-func (m *MockUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
+func (m *MockUserRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.AuthorizedUserView, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FindByID", ctx, id)
-	ret0, _ := ret[0].(*readmodel.AuthorizedUserRM)
+	ret0, _ := ret[0].(*queries.AuthorizedUserView)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -114,10 +115,10 @@ func (m *MockAuthUseCase) EXPECT() *MockAuthUseCaseMockRecorder {
 }
 
 // GetCurrentUser mocks base method.
-func (m *MockAuthUseCase) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
+func (m *MockAuthUseCase) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*queries.AuthorizedUserView, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentUser", ctx, userID)
-	ret0, _ := ret[0].(*readmodel.AuthorizedUserRM)
+	ret0, _ := ret[0].(*queries.AuthorizedUserView)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -129,19 +130,19 @@ func (mr *MockAuthUseCaseMockRecorder) GetCurrentUser(ctx, userID any) *gomock.C
 }
 
 // Login mocks base method.
-func (m *MockAuthUseCase) Login(ctx context.Context, credentials user.Credentials) (*usecase.TokenPair, *readmodel.AuthorizedUserRM, error) {
+func (m *MockAuthUseCase) Login(ctx context.Context, req request.LoginRequest) (*usecase.TokenPair, *queries.AuthorizedUserView, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Login", ctx, credentials)
+	ret := m.ctrl.Call(m, "Login", ctx, req)
 	ret0, _ := ret[0].(*usecase.TokenPair)
-	ret1, _ := ret[1].(*readmodel.AuthorizedUserRM)
+	ret1, _ := ret[1].(*queries.AuthorizedUserView)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
 
 // Login indicates an expected call of Login.
-func (mr *MockAuthUseCaseMockRecorder) Login(ctx, credentials any) *gomock.Call {
+func (mr *MockAuthUseCaseMockRecorder) Login(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockAuthUseCase)(nil).Login), ctx, credentials)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Login", reflect.TypeOf((*MockAuthUseCase)(nil).Login), ctx, req)
 }
 
 // RefreshToken mocks base method.
