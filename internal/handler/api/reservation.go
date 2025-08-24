@@ -25,25 +25,6 @@ var (
 	ErrInvalidReservationIDFormat  = errs.New("invalid reservation ID format")
 )
 
-type createReservationErrorRule struct {
-	err     error
-	status  int
-	message string
-	extra   map[string]string
-}
-
-var createReservationErrorRules = []createReservationErrorRule{
-	{commands.ErrResourceNotFound, http.StatusNotFound, "Resource not found", nil},
-	{commands.ErrCouponNotFound, http.StatusNotFound, "Coupon not found", nil},
-	{commands.ErrInvalidTimeSlot, http.StatusBadRequest, "Invalid request parameters", nil},
-	{commands.ErrInsufficientLeadTime, http.StatusBadRequest, "Invalid request parameters", nil},
-	{commands.ErrInvalidCoupon, http.StatusBadRequest, "Invalid request parameters", nil},
-	{commands.ErrDomainValidation, http.StatusBadRequest, "Invalid request parameters", nil},
-	{commands.ErrDuplicateReservation, http.StatusConflict, "Reservation conflict", nil},
-	{commands.ErrReservationConflict, http.StatusConflict, "Reservation conflict", nil},
-	{commands.ErrIdempotencyInProgress, http.StatusAccepted, "Reservation request is currently being processed", nil},
-}
-
 type ReservationHandler struct {
 	reservationCommands commands.ReservationCommands
 	reservationQueries  queries.ReservationQueries
@@ -54,24 +35,6 @@ func NewReservationHandler(reservationCommands commands.ReservationCommands, res
 		reservationCommands: reservationCommands,
 		reservationQueries:  reservationQueries,
 	}
-}
-
-func (h *ReservationHandler) handleCreateReservationError(c *gin.Context, err error, idempotencyKey uuid.UUID) {
-	for _, rule := range createReservationErrorRules {
-		if errors.Is(err, rule.err) {
-			if errors.Is(err, commands.ErrIdempotencyInProgress) {
-				slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
-				c.Header("Retry-After", "2")
-			} else {
-				slog.Warn("Create reservation error", "error", err, "status", rule.status)
-			}
-			httperr.AbortWithError(c, rule.status, err, rule.message, rule.extra)
-			return
-		}
-	}
-
-	slog.Error("Unexpected error in create reservation", "error", err)
-	httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal server error", nil)
 }
 
 // @Summary Create reservation
@@ -250,6 +213,43 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+type createReservationErrorRule struct {
+	err     error
+	status  int
+	message string
+	extra   map[string]string
+}
+
+var createReservationErrorRules = []createReservationErrorRule{
+	{commands.ErrResourceNotFound, http.StatusNotFound, "Resource not found", nil},
+	{commands.ErrCouponNotFound, http.StatusNotFound, "Coupon not found", nil},
+	{commands.ErrInvalidTimeSlot, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrInsufficientLeadTime, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrInvalidCoupon, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrDomainValidation, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrDuplicateReservation, http.StatusConflict, "Reservation conflict", nil},
+	{commands.ErrReservationConflict, http.StatusConflict, "Reservation conflict", nil},
+	{commands.ErrIdempotencyInProgress, http.StatusAccepted, "Reservation request is currently being processed", nil},
+}
+
+func (h *ReservationHandler) handleCreateReservationError(c *gin.Context, err error, idempotencyKey uuid.UUID) {
+	for _, rule := range createReservationErrorRules {
+		if errors.Is(err, rule.err) {
+			if errors.Is(err, commands.ErrIdempotencyInProgress) {
+				slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
+				c.Header("Retry-After", "2")
+			} else {
+				slog.Warn("Create reservation error", "error", err, "status", rule.status)
+			}
+			httperr.AbortWithError(c, rule.status, err, rule.message, rule.extra)
+			return
+		}
+	}
+
+	slog.Error("Unexpected error in create reservation", "error", err)
+	httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal server error", nil)
 }
 
 func (h *ReservationHandler) getIdempotencyKey(c *gin.Context) (uuid.UUID, error) {

@@ -30,6 +30,16 @@ type ReservationQueries interface {
 	GenerateETag(reservation *ReservationView) string
 }
 
+type ReservationReadStore interface {
+	FindByID(ctx context.Context, id uuid.UUID) (*ReservationView, error)
+	FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
+	FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
+}
+
+type reservationQueriesImpl struct {
+	repo ReservationReadStore
+}
+
 func NewReservationQueries(repo ReservationReadStore) ReservationQueries {
 	return &reservationQueriesImpl{repo: repo}
 }
@@ -125,14 +135,4 @@ type ReservationListItem struct {
 	Status       string    `json:"status"`
 	PriceCents   int32     `json:"price_cents"`
 	CreatedAt    time.Time `json:"created_at"`
-}
-
-type ReservationReadStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*ReservationView, error)
-	FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
-	FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
-}
-
-type reservationQueriesImpl struct {
-	repo ReservationReadStore
 }
