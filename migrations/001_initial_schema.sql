@@ -31,7 +31,7 @@ CREATE TABLE resources (
 
 CREATE TABLE coupons (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code TEXT NOT NULL UNIQUE,
+    code CITEXT NOT NULL UNIQUE,
     amount_off_cents INTEGER,
     percent_off NUMERIC(5,2),
     valid_from TIMESTAMPTZ,
@@ -41,7 +41,9 @@ CREATE TABLE coupons (
     CHECK (
         (amount_off_cents IS NOT null AND percent_off IS null) OR
         (amount_off_cents IS null AND percent_off IS NOT null)
-    )
+    ),
+    CHECK (percent_off IS null OR percent_off BETWEEN 0 AND 100),
+    CHECK (amount_off_cents IS null OR amount_off_cents >= 0)
 );
 
 CREATE TABLE reservations (
@@ -64,6 +66,7 @@ EXCLUDE USING gist (resource_id WITH =, slot WITH &&);
 CREATE TABLE notification_jobs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     kind TEXT NOT NULL CHECK (kind IN ('email', 'webhook')),
+    topic TEXT NOT NULL DEFAULT 'reservation_created',
     payload JSONB NOT NULL,
     run_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     attempts INTEGER NOT NULL DEFAULT 0,
@@ -74,15 +77,17 @@ CREATE TABLE notification_jobs (
 );
 
 CREATE TABLE idempotency_keys (
-    key UUID PRIMARY KEY,
+    key UUID NOT NULL,
     user_id UUID NOT NULL REFERENCES users(id),
     endpoint TEXT NOT NULL,
     request_hash TEXT NOT NULL,
     response_body_hash TEXT,
-    status TEXT NOT NULL CHECK (status IN ('in_progress', 'succeeded', 'failed')) DEFAULT 'in_progress',
+    status TEXT NOT NULL CHECK (status IN ('processing', 'completed', 'failed')) DEFAULT 'processing',
+    result_reservation_id UUID REFERENCES reservations(id),
     expires_at TIMESTAMPTZ NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (key, user_id)
 );
 
 CREATE UNIQUE INDEX idx_users_email_active_unique ON users(email) WHERE is_active = true;
@@ -95,6 +100,7 @@ CREATE INDEX idx_reservations_user_id ON reservations(user_id);
 CREATE INDEX idx_reservations_slot ON reservations USING gist(slot);
 CREATE INDEX idx_notification_jobs_status_run_at ON notification_jobs(status, run_at);
 CREATE INDEX idx_idempotency_keys_expires_at ON idempotency_keys(expires_at);
+CREATE INDEX idx_reservations_user_created_desc ON reservations (user_id, created_at DESC, id DESC);
 
 -- Insert initial data
 INSERT INTO companies (id, name) VALUES 

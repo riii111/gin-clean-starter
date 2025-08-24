@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/domain/user"
-	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -72,8 +72,8 @@ func (u *UserBuilder) BuildInfra() sqlc.Users {
 	}
 }
 
-func (u *UserBuilder) BuildReadModel() *readmodel.AuthorizedUserRM {
-	return &readmodel.AuthorizedUserRM{
+func (u *UserBuilder) BuildReadModel() *queries.AuthorizedUserView {
+	return &queries.AuthorizedUserView{
 		ID:        uuid.New(),
 		Email:     u.Email,
 		Role:      u.Role,

@@ -139,7 +139,6 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	}
 }
 
-// FOR FUTURE USE: returns the authenticated user ID from context
 func GetUserID(c *gin.Context) (uuid.UUID, bool) {
 	userID, exists := c.Get(ctxUserIDKey)
 	if !exists {

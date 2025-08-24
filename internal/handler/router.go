@@ -19,9 +19,9 @@ type route struct {
 	Mw      []gin.HandlerFunc
 }
 
-func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler, authMiddleware *middleware.AuthMiddleware) {
+func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, authMiddleware *middleware.AuthMiddleware) {
 	setupMiddleware(engine, cfg)
-	setupRoutes(engine, authHandler, authMiddleware)
+	setupRoutes(engine, authHandler, reservationHandler, authMiddleware)
 }
 
 func setupMiddleware(engine *gin.Engine, cfg config.Config) {
@@ -32,7 +32,7 @@ func setupMiddleware(engine *gin.Engine, cfg config.Config) {
 	engine.Use(middleware.ErrorHandler())
 }
 
-func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, authMiddleware *middleware.AuthMiddleware) {
+func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, authMiddleware *middleware.AuthMiddleware) {
 	engine.GET("/health", healthCheck)
 
 	if gin.Mode() == gin.DebugMode {
@@ -53,6 +53,16 @@ func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, authMiddlewar
 			addRoutes(authRequired, []route{
 				{Method: http.MethodPost, Path: "/logout", Handler: authHandler.Logout},
 				{Method: http.MethodGet, Path: "/me", Handler: authHandler.Me},
+			})
+		}
+
+		reservations := apiGroup.Group("/reservations")
+		reservations.Use(authMiddleware.RequireAuth())
+		{
+			addRoutes(reservations, []route{
+				{Method: http.MethodPost, Path: "", Handler: reservationHandler.CreateReservation},
+				{Method: http.MethodGet, Path: "", Handler: reservationHandler.GetUserReservations},
+				{Method: http.MethodGet, Path: "/:id", Handler: reservationHandler.GetReservation},
 			})
 		}
 	}

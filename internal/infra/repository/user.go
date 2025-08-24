@@ -1,4 +1,4 @@
-package repo_impl
+package repository
 
 import (
 	"context"
@@ -7,8 +7,8 @@ import (
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/infra"
-	"gin-clean-starter/internal/infra/sqlc"
-	"gin-clean-starter/internal/usecase/readmodel"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
 )
@@ -31,7 +31,7 @@ func NewUserRepository(queries *sqlc.Queries, db sqlc.DBTX) *UserRepository {
 	}
 }
 
-func (r *UserRepository) FindByEmail(ctx context.Context, email user.Email) (*readmodel.AuthorizedUserRM, string, error) {
+func (r *UserRepository) FindByEmail(ctx context.Context, email user.Email) (*queries.AuthorizedUserView, string, error) {
 	row, err := r.queries.FindUserByEmail(ctx, r.db, email.Value())
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -40,11 +40,11 @@ func (r *UserRepository) FindByEmail(ctx context.Context, email user.Email) (*re
 		return nil, "", infra.WrapRepoErr("failed to find user by email", err)
 	}
 
-	readModel := toAuthorizedUserRMFromUsers(row)
+	readModel := toAuthorizedUserViewFromUsers(row)
 	return readModel, row.PasswordHash, nil
 }
 
-func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel.AuthorizedUserRM, error) {
+func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*queries.AuthorizedUserView, error) {
 	row, err := r.queries.FindUserByID(ctx, r.db, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -53,7 +53,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id uuid.UUID) (*readmodel
 		return nil, infra.WrapRepoErr("failed to find user by ID", err)
 	}
 
-	readModel := toAuthorizedUserRMFromFindByIDRow(row)
+	readModel := toAuthorizedUserViewFromFindByIDRow(row)
 	return readModel, nil
 }
 
@@ -65,8 +65,8 @@ func (r *UserRepository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) 
 	return nil
 }
 
-func toAuthorizedUserRMFromUsers(row sqlc.Users) *readmodel.AuthorizedUserRM {
-	rm := &readmodel.AuthorizedUserRM{
+func toAuthorizedUserViewFromUsers(row sqlc.Users) *queries.AuthorizedUserView {
+	rm := &queries.AuthorizedUserView{
 		ID:       row.ID,
 		Email:    row.Email,
 		Role:     row.Role,
@@ -81,8 +81,8 @@ func toAuthorizedUserRMFromUsers(row sqlc.Users) *readmodel.AuthorizedUserRM {
 	return rm
 }
 
-func toAuthorizedUserRMFromFindByIDRow(row sqlc.FindUserByIDRow) *readmodel.AuthorizedUserRM {
-	rm := &readmodel.AuthorizedUserRM{
+func toAuthorizedUserViewFromFindByIDRow(row sqlc.FindUserByIDRow) *queries.AuthorizedUserView {
+	rm := &queries.AuthorizedUserView{
 		ID:       row.ID,
 		Email:    row.Email,
 		Role:     row.Role,

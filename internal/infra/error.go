@@ -55,6 +55,7 @@ const (
 	KindDBFailure          RepositoryErrorKind = "DB_FAILURE"
 	KindDuplicateKey       RepositoryErrorKind = "DUPLICATE_KEY"
 	KindForeignKeyViolated RepositoryErrorKind = "FOREIGN_KEY_VIOLATED"
+	KindConflict           RepositoryErrorKind = "CONFLICT"
 )
 
 func classifyPgErr(err error) RepositoryErrorKind {
@@ -65,6 +66,8 @@ func classifyPgErr(err error) RepositoryErrorKind {
 			return KindDuplicateKey
 		case "23503": // foreign_key_violation
 			return KindForeignKeyViolated
+		case "23P01": // exclusion_violation (e.g., EXCLUDE constraints like tstzrange overlap)
+			return KindConflict
 		default:
 			return KindDBFailure
 		}
