@@ -1,7 +1,7 @@
 package response
 
-import "gin-clean-starter/internal/usecase/readmodel"
+import "gin-clean-starter/internal/usecase/queries"
 
 type LoginResponse struct {
-	User *readmodel.AuthorizedUserRM `json:"user"`
+	User *queries.AuthorizedUserView `json:"user"`
 }

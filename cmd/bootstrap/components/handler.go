@@ -11,6 +11,7 @@ import (
 var HandlerModule = fx.Module("handler",
 	fx.Provide(
 		api.NewAuthHandler,
+		api.NewReservationHandler,
 		middleware.NewAuthMiddleware,
 	),
 	fx.Invoke(handler.NewRouter),

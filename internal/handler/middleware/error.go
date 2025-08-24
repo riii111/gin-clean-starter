@@ -30,7 +30,6 @@ func ErrorHandler() gin.HandlerFunc {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{
-				"type":    httperr.TypeInternal,
 				"message": "Internal server error",
 			},
 		})
@@ -44,7 +43,6 @@ func CustomRecovery() gin.HandlerFunc {
 				slog.Error("recovered from panic", "error", err, "path", c.Request.URL.Path)
 
 				resp := httperr.Response{Status: http.StatusInternalServerError}
-				resp.Error.Type = httperr.TypeInternal
 				resp.Error.Message = "Internal server error"
 
 				c.JSON(http.StatusInternalServerError, resp)

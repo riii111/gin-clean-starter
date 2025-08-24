@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/handler/api"
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/pkg/config"
@@ -78,8 +77,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 	expectedRefresh := "test-refresh-token"
 
 	s.Run("正常系: 有効なリクエストで200 OKが返却される", func() {
-		creds, _ := user.NewCredentials(reqBody.Email, reqBody.Password)
-		s.mockAUC.EXPECT().Login(gomock.Any(), creds).
+		s.mockAUC.EXPECT().Login(gomock.Any(), reqBody).
 			Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil).Times(1)
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 
@@ -123,8 +121,8 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 					if tc.expectCode == http.StatusOK {
 						email, _ := requestMap["email"].(string)
 						password, _ := requestMap["password"].(string)
-						creds, _ := user.NewCredentials(email, password)
-						s.mockAUC.EXPECT().Login(gomock.Any(), creds).
+						expectedReq := (&builder.AuthBuilder{Email: email, Password: password}).BuildDTO()
+						s.mockAUC.EXPECT().Login(gomock.Any(), expectedReq).
 							Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil)
 					}
 					rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "")
@@ -173,8 +171,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name, func() {
-				creds, _ := user.NewCredentials(reqBody.Email, reqBody.Password)
-				s.mockAUC.EXPECT().Login(gomock.Any(), creds).
+				s.mockAUC.EXPECT().Login(gomock.Any(), reqBody).
 					Return(nil, nil, tc.usecaseError).Times(1)
 
 				rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")

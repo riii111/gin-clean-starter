@@ -33,12 +33,16 @@ func AssertErrorResponse(t *testing.T, w *httptest.ResponseRecorder, expectedSta
 	assert.Equal(t, expectedStatus, w.Code,
 		fmt.Sprintf("Expected status %d, got %d", expectedStatus, w.Code))
 
-	var errorResponse map[string]string
+	var errorResponse struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
 	err := json.Unmarshal(w.Body.Bytes(), &errorResponse)
 	assert.NoError(t, err, fmt.Sprintf("Failed to decode error response JSON: %s", w.Body.String()))
 
 	if expectedErrorMsg != "" {
-		assert.Contains(t, errorResponse["error"], expectedErrorMsg,
+		assert.Contains(t, errorResponse.Error.Message, expectedErrorMsg,
 			"Response error message doesn't contain expected text")
 	}
 }
