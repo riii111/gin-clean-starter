@@ -46,34 +46,6 @@ SET
     updated_at = NOW()
 WHERE id = $1;
 
--- name: GetReservationsByUserID :many
-SELECT 
-    r.id,
-    r.resource_id,
-    r.slot,
-    r.status,
-    r.price_cents,
-    r.created_at,
-    res.name AS resource_name
-FROM reservations AS r
-INNER JOIN resources AS res ON r.resource_id = res.id
-WHERE r.user_id = $1
-ORDER BY r.created_at DESC;
-
--- name: GetReservationsByUserIDPaginated :many
-SELECT 
-    r.id,
-    r.resource_id,
-    r.slot,
-    r.status,
-    r.price_cents,
-    r.created_at,
-    res.name AS resource_name
-FROM reservations AS r
-INNER JOIN resources AS res ON r.resource_id = res.id
-WHERE r.user_id = $1
-ORDER BY r.created_at DESC
-LIMIT $2 OFFSET $3;
 
 -- name: GetReservationsByUserIDFirstPage :many
 SELECT 

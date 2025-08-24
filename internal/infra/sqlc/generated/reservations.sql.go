@@ -121,59 +121,6 @@ func (q *Queries) GetReservationByID(ctx context.Context, db DBTX, id uuid.UUID)
 	return i, err
 }
 
-const getReservationsByUserID = `-- name: GetReservationsByUserID :many
-SELECT 
-    r.id,
-    r.resource_id,
-    r.slot,
-    r.status,
-    r.price_cents,
-    r.created_at,
-    res.name AS resource_name
-FROM reservations AS r
-INNER JOIN resources AS res ON r.resource_id = res.id
-WHERE r.user_id = $1
-ORDER BY r.created_at DESC
-`
-
-type GetReservationsByUserIDRow struct {
-	ID           uuid.UUID          `json:"id"`
-	ResourceID   uuid.UUID          `json:"resource_id"`
-	Slot         string             `json:"slot"`
-	Status       string             `json:"status"`
-	PriceCents   int32              `json:"price_cents"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	ResourceName string             `json:"resource_name"`
-}
-
-func (q *Queries) GetReservationsByUserID(ctx context.Context, db DBTX, userID uuid.UUID) ([]GetReservationsByUserIDRow, error) {
-	rows, err := db.Query(ctx, getReservationsByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetReservationsByUserIDRow
-	for rows.Next() {
-		var i GetReservationsByUserIDRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ResourceID,
-			&i.Slot,
-			&i.Status,
-			&i.PriceCents,
-			&i.CreatedAt,
-			&i.ResourceName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getReservationsByUserIDFirstPage = `-- name: GetReservationsByUserIDFirstPage :many
 SELECT 
     r.id,
@@ -281,66 +228,6 @@ func (q *Queries) GetReservationsByUserIDKeyset(ctx context.Context, db DBTX, ar
 	var items []GetReservationsByUserIDKeysetRow
 	for rows.Next() {
 		var i GetReservationsByUserIDKeysetRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ResourceID,
-			&i.Slot,
-			&i.Status,
-			&i.PriceCents,
-			&i.CreatedAt,
-			&i.ResourceName,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getReservationsByUserIDPaginated = `-- name: GetReservationsByUserIDPaginated :many
-SELECT 
-    r.id,
-    r.resource_id,
-    r.slot,
-    r.status,
-    r.price_cents,
-    r.created_at,
-    res.name AS resource_name
-FROM reservations AS r
-INNER JOIN resources AS res ON r.resource_id = res.id
-WHERE r.user_id = $1
-ORDER BY r.created_at DESC
-LIMIT $2 OFFSET $3
-`
-
-type GetReservationsByUserIDPaginatedParams struct {
-	UserID uuid.UUID `json:"user_id"`
-	Limit  int32     `json:"limit"`
-	Offset int32     `json:"offset"`
-}
-
-type GetReservationsByUserIDPaginatedRow struct {
-	ID           uuid.UUID          `json:"id"`
-	ResourceID   uuid.UUID          `json:"resource_id"`
-	Slot         string             `json:"slot"`
-	Status       string             `json:"status"`
-	PriceCents   int32              `json:"price_cents"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	ResourceName string             `json:"resource_name"`
-}
-
-func (q *Queries) GetReservationsByUserIDPaginated(ctx context.Context, db DBTX, arg GetReservationsByUserIDPaginatedParams) ([]GetReservationsByUserIDPaginatedRow, error) {
-	rows, err := db.Query(ctx, getReservationsByUserIDPaginated, arg.UserID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetReservationsByUserIDPaginatedRow
-	for rows.Next() {
-		var i GetReservationsByUserIDPaginatedRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ResourceID,
