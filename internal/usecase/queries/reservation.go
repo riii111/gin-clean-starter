@@ -3,10 +3,9 @@ package queries
 import (
 	"context"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
+	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/pkg/errs"
 
 	"github.com/google/uuid"
@@ -14,6 +13,8 @@ import (
 
 var (
 	ErrReservationNotFound = errs.New("reservation not found")
+	ErrReservationAccess   = errs.New("reservation access failed")
+	ErrInvalidCursor       = errs.New("invalid cursor")
 )
 
 const (
@@ -40,11 +41,13 @@ func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, i
 func (q *reservationQueriesImpl) GetByIDWithRole(ctx context.Context, actorID uuid.UUID, actorRole string, id uuid.UUID) (*ReservationView, error) {
 	reservation, err := q.repo.FindByID(ctx, id)
 	if err != nil {
-		return nil, errs.Mark(err, ErrReservationNotFound)
+		if infra.IsKind(err, infra.KindNotFound) {
+			return nil, errs.Mark(err, ErrReservationNotFound)
+		}
+		return nil, errs.Mark(err, ErrReservationAccess)
 	}
 
 	if !canAccessReservation(actorID, actorRole, reservation) {
-		// Return not found to avoid information leakage
 		return nil, ErrReservationNotFound
 	}
 
@@ -52,9 +55,7 @@ func (q *reservationQueriesImpl) GetByIDWithRole(ctx context.Context, actorID uu
 }
 
 func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, after *Cursor, limit int) ([]*ReservationListItem, *Cursor, error) {
-	if limit <= 0 {
-		limit = 50
-	}
+	limit = ValidateLimit(limit)
 
 	var rows []*ReservationListItem
 	var err error
@@ -62,22 +63,25 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 	if after == nil || after.After == "" {
 		rows, err = q.repo.FindByUserIDFirstPage(ctx, userID, int32(limit+1))
 	} else {
-		lastCreatedAt, lastID, decodeErr := decodeCursor(after.After)
+		lastCreatedAt, lastID, decodeErr := DecodeAfterCursor(after.After)
 		if decodeErr != nil {
-			return nil, nil, decodeErr
+			return nil, nil, errs.Mark(decodeErr, ErrInvalidCursor)
 		}
 		rows, err = q.repo.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, int32(limit+1))
 	}
 
 	if err != nil {
-		return nil, nil, errs.Mark(err, ErrReservationNotFound)
+		if infra.IsKind(err, infra.KindNotFound) {
+			return nil, nil, errs.Mark(err, ErrReservationNotFound)
+		}
+		return nil, nil, errs.Mark(err, ErrReservationAccess)
 	}
 
 	var nextCursor *Cursor
 	if len(rows) > limit {
 		lastItem := rows[limit-1]
 		nextCursor = &Cursor{
-			After: encodeCursor(lastItem.CreatedAt, lastItem.ID),
+			After: EncodeAfterCursor(lastItem.CreatedAt, lastItem.ID),
 		}
 		rows = rows[:limit]
 	}
@@ -86,30 +90,7 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 }
 
 func (q *reservationQueriesImpl) GenerateETag(reservation *ReservationView) string {
-	return fmt.Sprintf("W/\"%s-%d\"", reservation.ID.String(), reservation.UpdatedAt.UnixNano())
-}
-
-func encodeCursor(createdAt time.Time, id uuid.UUID) string {
-	return fmt.Sprintf("%d-%s", createdAt.UnixNano(), id.String())
-}
-
-func decodeCursor(cursor string) (time.Time, uuid.UUID, error) {
-	parts := strings.SplitN(cursor, "-", 2)
-	if len(parts) != 2 {
-		return time.Time{}, uuid.Nil, fmt.Errorf("invalid cursor format")
-	}
-
-	timestamp, err := strconv.ParseInt(parts[0], 10, 64)
-	if err != nil {
-		return time.Time{}, uuid.Nil, fmt.Errorf("invalid timestamp: %w", err)
-	}
-
-	id, err := uuid.Parse(parts[1])
-	if err != nil {
-		return time.Time{}, uuid.Nil, fmt.Errorf("invalid UUID: %w", err)
-	}
-
-	return time.Unix(0, timestamp), id, nil
+	return fmt.Sprintf("W/\"%s-%d\"", reservation.ID.String(), reservation.UpdatedAt.UnixMicro())
 }
 
 func canAccessReservation(actorID uuid.UUID, actorRole string, reservation *ReservationView) bool {
@@ -149,14 +130,8 @@ type ReservationListItem struct {
 	CreatedAt    time.Time `json:"created_at"`
 }
 
-type Cursor struct {
-	After string `json:"after,omitempty"`
-}
-
 type ReservationReadStore interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*ReservationView, error)
-	FindByUserID(ctx context.Context, userID uuid.UUID) ([]*ReservationListItem, error)
-	FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*ReservationListItem, error)
 	FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
 	FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
 }

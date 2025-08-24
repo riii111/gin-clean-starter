@@ -6,7 +6,6 @@ import (
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 )
 
 type ReservationResponse struct {
@@ -36,17 +35,31 @@ type ReservationListResponse struct {
 }
 
 func FromReservationView(rm *queries.ReservationView) *ReservationResponse {
-	var response ReservationResponse
-	if err := copier.Copy(&response, rm); err != nil {
-		panic("failed to copy ReservationView: " + err.Error())
+	return &ReservationResponse{
+		ID:           rm.ID,
+		ResourceID:   rm.ResourceID,
+		ResourceName: rm.ResourceName,
+		UserID:       rm.UserID,
+		UserEmail:    rm.UserEmail,
+		Slot:         rm.Slot,
+		Status:       rm.Status,
+		PriceCents:   rm.PriceCents,
+		CouponID:     rm.CouponID,
+		CouponCode:   rm.CouponCode,
+		Note:         rm.Note,
+		CreatedAt:    rm.CreatedAt,
+		UpdatedAt:    rm.UpdatedAt,
 	}
-	return &response
 }
 
 func FromReservationListItem(rm *queries.ReservationListItem) *ReservationListResponse {
-	var response ReservationListResponse
-	if err := copier.Copy(&response, rm); err != nil {
-		panic("failed to copy ReservationListItem: " + err.Error())
+	return &ReservationListResponse{
+		ID:           rm.ID,
+		ResourceID:   rm.ResourceID,
+		ResourceName: rm.ResourceName,
+		Slot:         rm.Slot,
+		Status:       rm.Status,
+		PriceCents:   rm.PriceCents,
+		CreatedAt:    rm.CreatedAt,
 	}
-	return &response
 }

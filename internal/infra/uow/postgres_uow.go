@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/jinzhu/copier"
 )
 
 const (
@@ -219,11 +218,12 @@ func (r *commandReads) ResourceByID(ctx context.Context, id uuid.UUID) (*shared.
 		return nil, err
 	}
 
-	var snapshot shared.ResourceSnapshot
-	if err := copier.Copy(&snapshot, resource); err != nil {
-		return nil, err
+	snapshot := &shared.ResourceSnapshot{
+		ID:          resource.ID,
+		Name:        resource.Name,
+		LeadTimeMin: resource.LeadTimeMin,
 	}
-	return &snapshot, nil
+	return snapshot, nil
 }
 
 func (r *commandReads) CouponByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error) {
@@ -236,11 +236,15 @@ func (r *commandReads) CouponByCode(ctx context.Context, code string) (*shared.C
 		return nil, err
 	}
 
-	var snapshot shared.CouponSnapshot
-	if err := copier.Copy(&snapshot, coupon); err != nil {
-		return nil, err
+	snapshot := &shared.CouponSnapshot{
+		ID:             coupon.ID,
+		Code:           coupon.Code,
+		AmountOffCents: coupon.AmountOffCents,
+		PercentOff:     coupon.PercentOff,
+		ValidFrom:      coupon.ValidFrom,
+		ValidTo:        coupon.ValidTo,
 	}
-	return &snapshot, nil
+	return snapshot, nil
 }
 
 func (r *commandReads) ReservationByID(ctx context.Context, id uuid.UUID) (*shared.ReservationSnapshot, error) {
@@ -253,11 +257,13 @@ func (r *commandReads) ReservationByID(ctx context.Context, id uuid.UUID) (*shar
 		return nil, err
 	}
 
-	var snapshot shared.ReservationSnapshot
-	if err := copier.Copy(&snapshot, reservation); err != nil {
-		return nil, err
+	snapshot := &shared.ReservationSnapshot{
+		ID:         reservation.ID,
+		ResourceID: reservation.ResourceID,
+		UserID:     reservation.UserID,
+		Status:     reservation.Status,
 	}
-	return &snapshot, nil
+	return snapshot, nil
 }
 
 func (r *commandReads) IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*shared.IdempotencyRecord, error) {
@@ -270,9 +276,13 @@ func (r *commandReads) IdempotencyByKey(ctx context.Context, key, userID uuid.UU
 		return nil, err
 	}
 
-	var snapshot shared.IdempotencyRecord
-	if err := copier.Copy(&snapshot, record); err != nil {
-		return nil, err
+	snapshot := &shared.IdempotencyRecord{
+		Key:                 record.Key,
+		UserID:              record.UserID,
+		Status:              record.Status,
+		RequestHash:         record.RequestHash,
+		ResultReservationID: record.ResultReservationID,
+		ExpiresAt:           record.ExpiresAt,
 	}
-	return &snapshot, nil
+	return snapshot, nil
 }
