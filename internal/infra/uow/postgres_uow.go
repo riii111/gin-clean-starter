@@ -170,6 +170,7 @@ type pgTx struct {
 	reservationRepo  shared.ReservationRepository
 	idempotencyRepo  shared.IdempotencyRepository
 	notificationRepo shared.NotificationRepository
+	userRepo         shared.UserRepository
 	commandReads     shared.CommandReads
 }
 
@@ -196,6 +197,13 @@ func (t *pgTx) Notifications() shared.NotificationRepository {
 		t.notificationRepo = repository.NewNotificationRepository(t.uow.q, t.dbtx)
 	}
 	return t.notificationRepo
+}
+
+func (t *pgTx) Users() shared.UserRepository {
+	if t.userRepo == nil {
+		t.userRepo = repository.NewUserRepository(t.uow.q)
+	}
+	return t.userRepo
 }
 
 func (t *pgTx) Reads() shared.CommandReads {
