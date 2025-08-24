@@ -81,7 +81,7 @@ func (a *authUseCaseImpl) Login(ctx context.Context, req reqdto.LoginRequest) (*
 
 	err = a.userRepo.UpdateLastLogin(ctx, userReadModel.ID)
 	if err != nil {
-		slog.Warn("failed to update last login", "user_id", userReadModel.ID, "error", err)
+		slog.Warn("failed to update last login", "user_id", userReadModel.ID, "error", err.Error())
 	}
 
 	tokenPair := &TokenPair{

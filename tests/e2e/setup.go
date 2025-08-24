@@ -150,9 +150,9 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 			break
 		}
 		if attempts > 0 {
-			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr, "retry_wait", waitTime)
+			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr.Error(), "retry_wait", waitTime)
 		} else {
-			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr)
+			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr.Error())
 		}
 	}
 	require.NoError(t, createErr, "テスト用データベースの作成に失敗")
@@ -164,14 +164,14 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 
 		cleanupPool, err := pgxpool.New(cleanupCtx, adminDSN)
 		if err != nil {
-			slog.Warn("クリーンアップ用のデータベース接続に失敗しました", "database", dbName, "error", err)
+			slog.Warn("クリーンアップ用のデータベース接続に失敗しました", "database", dbName, "error", err.Error())
 			return
 		}
 		defer cleanupPool.Close()
 
 		_, err = cleanupPool.Exec(cleanupCtx, "DROP DATABASE IF EXISTS "+dbName)
 		if err != nil {
-			slog.Warn("テストデータベースの削除に失敗しました", "database", dbName, "error", err)
+			slog.Warn("テストデータベースの削除に失敗しました", "database", dbName, "error", err.Error())
 		}
 	})
 
@@ -309,7 +309,7 @@ func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, con
 	}
 	defer func() {
 		if err := app.Stop(ctx); err != nil {
-			slog.Warn("fxアプリケーションの停止に失敗しました", "error", err)
+			slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
 		}
 	}()
 
@@ -491,7 +491,7 @@ func (s *SharedSuite) SetupTest() {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := s.app.Stop(ctx); err != nil {
-				slog.Warn("fxアプリケーションの停止に失敗しました", "error", err)
+				slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
 			}
 			s.app = nil
 		}

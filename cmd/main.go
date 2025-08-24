@@ -63,14 +63,14 @@ func main() {
 	)
 
 	if err := app.Start(context.Background()); err != nil {
-		slog.Error("アプリケーションの起動に失敗しました", "error", err)
+		slog.Error("アプリケーションの起動に失敗しました", "error", err.Error())
 		os.Exit(1)
 	}
 
 	<-app.Done()
 
 	if err := app.Stop(context.Background()); err != nil {
-		slog.Error("アプリケーションの停止に失敗しました", "error", err)
+		slog.Error("アプリケーションの停止に失敗しました", "error", err.Error())
 		// Djangoと同様、Exitしない
 	}
 
