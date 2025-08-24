@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"gin-clean-starter/internal/domain/coupon"
@@ -24,6 +25,9 @@ const (
 	EndpointCreateReservation = "POST /reservations"
 	IdemStatusProcessing      = "processing"
 	IdemStatusCompleted       = "completed"
+
+	NotificationKindEmail               = "email"
+	NotificationTopicReservationCreated = "reservation_created"
 )
 
 // Public errors - used by handlers
@@ -64,20 +68,20 @@ type ReservationCommands interface {
 }
 
 type reservationUseCaseImpl struct {
-	uow     shared.UnitOfWork
-	factory *reservation.Factory
-	clock   clock.Clock
+	uow      shared.UnitOfWork
+	services *reservation.Services
+	clock    clock.Clock
 }
 
 func NewReservationUseCase(
 	uow shared.UnitOfWork,
-	factory *reservation.Factory,
+	services *reservation.Services,
 	clock clock.Clock,
 ) ReservationCommands {
 	return &reservationUseCaseImpl{
-		uow:     uow,
-		factory: factory,
-		clock:   clock,
+		uow:      uow,
+		services: services,
+		clock:    clock,
 	}
 }
 
@@ -97,7 +101,7 @@ func (r *reservationUseCaseImpl) CreateReservation(
 		return nil, err
 	}
 
-	requestHash := r.calculateRequestHash(req)
+	requestHash := r.calculateNormalizedHash(req)
 	expiresAt := r.clock.Now().Add(24 * time.Hour)
 
 	var result *CreateReservationResult
@@ -117,7 +121,7 @@ func (r *reservationUseCaseImpl) CreateReservation(
 		}
 
 		var reservationID *uuid.UUID
-		reservationID, err = r.createNewReservationWithValidatedData(ctx, tx, validationResult, userID, idempotencyKey)
+		reservationID, err = r.createReservation(ctx, tx, validationResult, userID, idempotencyKey)
 		if err != nil {
 			return err
 		}
@@ -142,7 +146,9 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	expiresAt time.Time,
 ) (*uuid.UUID, error) {
 	if err := tx.Idempotency().TryInsert(ctx, tx.DB(), idempotencyKey, userID, EndpointCreateReservation, requestHash, expiresAt); err != nil {
-		return nil, errs.Mark(err, errIdempotencyCheckFailed)
+		if !infra.IsKind(err, infra.KindConflict) {
+			return nil, errs.Mark(err, errIdempotencyCheckFailed)
+		}
 	}
 
 	existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
@@ -168,13 +174,14 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	}
 }
 
-func (r *reservationUseCaseImpl) createNewReservationWithValidatedData(
+func (r *reservationUseCaseImpl) createReservation(
 	ctx context.Context,
 	tx shared.Tx,
 	validationResult *ValidationResult,
 	userID, idempotencyKey uuid.UUID,
 ) (*uuid.UUID, error) {
-	reservationEntity, err := r.factory.CreateReservation(
+	reservationEntity, err := reservation.NewReservation(
+		r.services,
 		validationResult.Resource,
 		userID,
 		validationResult.TimeSlot,
@@ -218,12 +225,17 @@ func (r *reservationUseCaseImpl) validateResourceAndCoupon(
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrResourceNotFound
 		}
-		return nil, errs.Mark(err, ErrResourceNotFound)
+		return nil, errs.Mark(err, errDatabaseOperationFailed)
 	}
 
 	resourceEntity, err := resource.NewResource(resourceRM.ID, resourceRM.Name, resourceRM.LeadTimeMin)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidation)
+	}
+
+	minLeadTime := time.Duration(resourceEntity.LeadTimeMin()) * time.Minute
+	if domainData.TimeSlot.Start().Before(r.clock.Now().Add(minLeadTime)) {
+		return nil, ErrInsufficientLeadTime
 	}
 
 	// Coupon validation (if provided)
@@ -234,7 +246,7 @@ func (r *reservationUseCaseImpl) validateResourceAndCoupon(
 			if infra.IsKind(err, infra.KindNotFound) {
 				return nil, ErrCouponNotFound
 			}
-			return nil, errs.Mark(err, ErrCouponNotFound)
+			return nil, errs.Mark(err, errDatabaseOperationFailed)
 		}
 
 		couponEntity, err = coupon.NewCoupon(
@@ -269,22 +281,46 @@ func (r *reservationUseCaseImpl) createNotificationJobByID(
 ) error {
 	notificationPayload, err := json.Marshal(map[string]any{
 		"reservation_id": reservationID,
-		"type":           "reservation_created",
+		"type":           NotificationTopicReservationCreated,
 	})
 	if err != nil {
 		return err
 	}
 
-	return tx.Notifications().CreateJob(ctx, tx.DB(), "email", "reservation_created", notificationPayload, r.clock.Now())
-}
-
-func (r *reservationUseCaseImpl) calculateRequestHash(req reqdto.CreateReservationRequest) string {
-	data, _ := json.Marshal(req)
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
+	return tx.Notifications().CreateJob(ctx, tx.DB(), NotificationKindEmail, NotificationTopicReservationCreated, notificationPayload, r.clock.Now())
 }
 
 func (r *reservationUseCaseImpl) calculateIDHash(id uuid.UUID) string {
 	hash := sha256.Sum256([]byte(id.String()))
 	return hex.EncodeToString(hash[:])
+}
+
+func (r *reservationUseCaseImpl) calculateNormalizedHash(req reqdto.CreateReservationRequest) string {
+	normalizedCouponCode := req.GetCouponCode()
+	if normalizedCouponCode != nil {
+		lowered := strings.ToLower(*normalizedCouponCode)
+		normalizedCouponCode = &lowered
+	}
+
+	normalized := reqdto.CreateReservationRequest{
+		ResourceID: req.ResourceID,
+		StartTime:  req.StartTime.UTC(),
+		EndTime:    req.EndTime.UTC(),
+		CouponCode: normalizedCouponCode,
+		Note:       normalizeNote(req.Note),
+	}
+	data, _ := json.Marshal(normalized)
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+
+func normalizeNote(note *string) *string {
+	if note == nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(*note)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }

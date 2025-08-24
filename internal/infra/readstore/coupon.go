@@ -2,6 +2,7 @@ package readstore
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"gin-clean-starter/internal/infra"
@@ -31,7 +32,8 @@ func NewCouponReadStore(queries *sqlc.Queries, db sqlc.DBTX) *CouponReadStore {
 }
 
 func (r *CouponReadStore) FindByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error) {
-	row, err := r.queries.GetCouponByCode(ctx, r.db, code)
+	normalizedCode := strings.ToLower(code)
+	row, err := r.queries.GetCouponByCode(ctx, r.db, normalizedCode)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("coupon not found", err, infra.KindNotFound)

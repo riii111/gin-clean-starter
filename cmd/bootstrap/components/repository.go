@@ -21,7 +21,6 @@ var RepositoryModule = fx.Module("repository",
 			uow.NewPostgresUoW,
 			fx.As(new(shared.UnitOfWork)),
 		),
-		// TODO: migrate to UoW or Read/Write
 		fx.Annotate(
 			repo_impl.NewUserRepository,
 			fx.As(new(usecase.UserRepository)),

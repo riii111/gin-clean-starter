@@ -13,7 +13,6 @@ import (
 
 type ReservationWriteQueries interface {
 	CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (sqlc.Reservations, error)
-	GetReservationByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReservationByIDRow, error)
 }
 
 type ReservationRepository struct {

@@ -90,7 +90,7 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 			}
 		}
 
-		if !isRetryableError(err) || attempt == maxRetries {
+		if !shouldRetry(err, attempt, maxRetries) {
 			if attempt == maxRetries {
 				slog.Error("transaction failed after max retries",
 					"attempts", attempt+1,
@@ -100,10 +100,7 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 			return err
 		}
 
-		// Jitter prevents thundering herd
-		waitTime := time.Duration(1<<attempt) * base
-		jitter := time.Duration(rand.Int63n(int64(waitTime / 5)))
-		waitTime += jitter
+		waitTime := calculateBackoff(attempt, base)
 
 		slog.Warn("retrying transaction due to retryable error",
 			"attempt", attempt+1,
@@ -139,6 +136,16 @@ func (u *PostgresUoW) runReadOnlyTx(ctx context.Context, options pgx.TxOptions, 
 	}
 
 	return pgxTx.Commit(ctx)
+}
+
+func shouldRetry(err error, attempt, maxRetries int) bool {
+	return isRetryableError(err) && attempt < maxRetries
+}
+
+func calculateBackoff(attempt int, base time.Duration) time.Duration {
+	waitTime := time.Duration(1<<attempt) * base
+	jitter := time.Duration(rand.Int63n(int64(waitTime / 5)))
+	return waitTime + jitter
 }
 
 func isRetryableError(err error) bool {

@@ -71,9 +71,6 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 	}
 
 	if err != nil {
-		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, nil, errs.Mark(err, ErrReservationNotFound)
-		}
 		return nil, nil, errs.Mark(err, ErrReservationAccess)
 	}
 

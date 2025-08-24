@@ -16,7 +16,12 @@ var UseCaseModule = fx.Module("usecase",
 			reservation.NewDefaultPriceCalculator,
 			fx.As(new(reservation.PriceCalculator)),
 		),
-		reservation.NewFactory,
+		func(clock clock.Clock, calc reservation.PriceCalculator) *reservation.Services {
+			return &reservation.Services{
+				Clock:           clock,
+				PriceCalculator: calc,
+			}
+		},
 		usecase.NewAuthUseCase,
 		commands.NewReservationUseCase,
 	),

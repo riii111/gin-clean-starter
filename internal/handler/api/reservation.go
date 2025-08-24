@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
@@ -40,7 +41,7 @@ var createReservationErrorRules = []createReservationErrorRule{
 	{commands.ErrDomainValidation, http.StatusBadRequest, "Invalid request parameters", nil},
 	{commands.ErrDuplicateReservation, http.StatusConflict, "Reservation conflict", nil},
 	{commands.ErrReservationConflict, http.StatusConflict, "Reservation conflict", nil},
-	{commands.ErrIdempotencyInProgress, http.StatusAccepted, "Reservation request is currently being processed", map[string]string{"retry_after": "2"}},
+	{commands.ErrIdempotencyInProgress, http.StatusAccepted, "Reservation request is currently being processed", nil},
 }
 
 type ReservationHandler struct {
@@ -60,6 +61,7 @@ func (h *ReservationHandler) handleCreateReservationError(c *gin.Context, err er
 		if errors.Is(err, rule.err) {
 			if errors.Is(err, commands.ErrIdempotencyInProgress) {
 				slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
+				c.Header("Retry-After", "2")
 			} else {
 				slog.Warn("Create reservation error", "error", err, "status", rule.status)
 			}
@@ -184,6 +186,7 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 
 	etag := h.reservationQueries.GenerateETag(reservationRM)
 	if match := c.GetHeader("If-None-Match"); match == etag {
+		c.Header("ETag", etag)
 		c.Status(http.StatusNotModified)
 		return
 	}
@@ -211,7 +214,22 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 		return
 	}
 
-	reservationsRM, _, err := h.reservationQueries.ListByUser(c.Request.Context(), userID, nil, 50)
+	afterStr := c.Query("after")
+	limitStr := c.Query("limit")
+
+	var after *queries.Cursor
+	if afterStr != "" {
+		after = &queries.Cursor{After: afterStr}
+	}
+
+	limit := 20
+	if limitStr != "" {
+		if parsedLimit, err := strconv.Atoi(limitStr); err == nil {
+			limit = queries.ValidateLimit(parsedLimit)
+		}
+	}
+
+	reservationsRM, nextCursor, err := h.reservationQueries.ListByUser(c.Request.Context(), userID, after, limit)
 	if err != nil {
 		slog.Error("Unexpected error in get user reservations", "user_id", userID, "error", err)
 		httperr.AbortWithError(c, http.StatusInternalServerError, err,
@@ -224,7 +242,14 @@ func (h *ReservationHandler) GetUserReservations(c *gin.Context) {
 		response[i] = resdto.FromReservationListItem(rm)
 	}
 
-	c.JSON(http.StatusOK, response)
+	result := map[string]any{
+		"reservations": response,
+	}
+	if nextCursor != nil {
+		result["next_cursor"] = nextCursor.After
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 func (h *ReservationHandler) getIdempotencyKey(c *gin.Context) (uuid.UUID, error) {

@@ -2,6 +2,9 @@ package readstore
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"gin-clean-starter/internal/infra"
@@ -49,7 +52,7 @@ func rowToReservationView(row sqlc.GetReservationByIDRow) *queries.ReservationVi
 		ResourceName: row.ResourceName,
 		UserID:       row.UserID,
 		UserEmail:    row.UserEmail,
-		Slot:         row.Slot,
+		Slot:         formatTstzrangeToISO8601(row.Slot),
 		Status:       row.Status,
 		PriceCents:   row.PriceCents,
 		CouponID:     pgconv.UUIDPtrFromPgtype(row.CouponID),
@@ -105,7 +108,7 @@ func toReservationListItemFromUserFirstPageRow(row sqlc.GetReservationsByUserIDF
 		ID:           row.ID,
 		ResourceID:   row.ResourceID,
 		ResourceName: row.ResourceName,
-		Slot:         row.Slot,
+		Slot:         formatTstzrangeToISO8601(row.Slot),
 		Status:       row.Status,
 		PriceCents:   row.PriceCents,
 		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
@@ -117,9 +120,42 @@ func toReservationListItemFromUserKeysetRow(row sqlc.GetReservationsByUserIDKeys
 		ID:           row.ID,
 		ResourceID:   row.ResourceID,
 		ResourceName: row.ResourceName,
-		Slot:         row.Slot,
+		Slot:         formatTstzrangeToISO8601(row.Slot),
 		Status:       row.Status,
 		PriceCents:   row.PriceCents,
 		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
 	}
+}
+
+func formatTstzrangeToISO8601(tstzrange string) string {
+	cleaned := strings.Trim(tstzrange, "[]()")
+
+	parts := strings.Split(cleaned, ",")
+	if len(parts) != 2 {
+		return tstzrange
+	}
+
+	startStr := strings.TrimSpace(parts[0])
+	endStr := strings.TrimSpace(parts[1])
+
+	startISO := convertTimestampToISO8601(startStr)
+	endISO := convertTimestampToISO8601(endStr)
+
+	return fmt.Sprintf("%s/%s", startISO, endISO)
+}
+
+func convertTimestampToISO8601(timestamp string) string {
+	re := regexp.MustCompile(`^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})\+(\d{2})$`)
+	matches := re.FindStringSubmatch(timestamp)
+
+	if len(matches) == 4 {
+		date := matches[1]
+		timeStr := matches[2]
+		if matches[3] == "00" {
+			return fmt.Sprintf("%sT%sZ", date, timeStr)
+		}
+		return fmt.Sprintf("%sT%s+%s:00", date, timeStr, matches[3])
+	}
+
+	return timestamp
 }

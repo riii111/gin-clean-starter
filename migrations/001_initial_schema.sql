@@ -41,7 +41,9 @@ CREATE TABLE coupons (
     CHECK (
         (amount_off_cents IS NOT null AND percent_off IS null) OR
         (amount_off_cents IS null AND percent_off IS NOT null)
-    )
+    ),
+    CHECK (percent_off IS NULL OR percent_off BETWEEN 0 AND 100),
+    CHECK (amount_off_cents IS NULL OR amount_off_cents >= 0)
 );
 
 CREATE TABLE reservations (
