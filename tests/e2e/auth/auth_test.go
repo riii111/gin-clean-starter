@@ -127,7 +127,7 @@ func (s *authSuite) TestLogin() {
 				require.Greater(t, loginRes.ExpiresIn, int64(0), "有効期限が無効")
 
 				// last_loginが更新されることを確認
-				var lastLogin interface{}
+				var lastLogin any
 				err = s.DB.QueryRow(s.T().Context(), "SELECT last_login FROM users WHERE email = $1", tt.email).Scan(&lastLogin)
 				require.NoError(t, err)
 				require.NotNil(t, lastLogin, "last_loginが更新されていない")
