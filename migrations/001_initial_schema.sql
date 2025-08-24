@@ -31,7 +31,7 @@ CREATE TABLE resources (
 
 CREATE TABLE coupons (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    code TEXT NOT NULL UNIQUE,
+    code CITEXT NOT NULL UNIQUE,
     amount_off_cents INTEGER,
     percent_off NUMERIC(5,2),
     valid_from TIMESTAMPTZ,

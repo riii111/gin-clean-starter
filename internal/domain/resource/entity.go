@@ -42,11 +42,6 @@ func NewResource(id uuid.UUID, name string, leadTimeMin int) (*Resource, error) 
 	}, nil
 }
 
-func (r *Resource) IsBookableAt(bookingTime time.Time) bool {
-	requiredTime := time.Now().Add(time.Duration(r.leadTimeMin) * time.Minute)
-	return bookingTime.After(requiredTime)
-}
-
 func validateResourceName(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -145,33 +146,45 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	requestHash string,
 	expiresAt time.Time,
 ) (*uuid.UUID, error) {
+	inserted := true
 	if err := tx.Idempotency().TryInsert(ctx, tx.DB(), idempotencyKey, userID, EndpointCreateReservation, requestHash, expiresAt); err != nil {
 		if !infra.IsKind(err, infra.KindConflict) {
 			return nil, errs.Mark(err, errIdempotencyCheckFailed)
 		}
+		inserted = false
 	}
 
-	existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
-	if err != nil {
-		return nil, errs.Mark(err, errIdempotencyCheckFailed)
-	}
-
-	switch existing.Status {
-	case IdemStatusCompleted:
-		if existing.ResultReservationID != nil {
-			return existing.ResultReservationID, nil
+	if !inserted {
+		existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
+		if err != nil {
+			return nil, errs.Mark(err, errIdempotencyCheckFailed)
 		}
-		return nil, errMissingResultReservationID
 
-	case IdemStatusProcessing:
-		if existing.RequestHash != requestHash {
-			return nil, ErrDuplicateReservation
+		// Treat expired keys as non-existent (allows new creation)
+		if existing.ExpiresAt.Before(r.clock.Now()) {
+			return nil, nil
 		}
-		return nil, ErrIdempotencyInProgress
 
-	default:
-		return nil, errInvalidIdempotencyStatus
+		switch existing.Status {
+		case IdemStatusCompleted:
+			if existing.ResultReservationID != nil {
+				return existing.ResultReservationID, nil
+			}
+			return nil, errMissingResultReservationID
+
+		case IdemStatusProcessing:
+			if existing.RequestHash != requestHash {
+				return nil, ErrDuplicateReservation
+			}
+			return nil, ErrIdempotencyInProgress
+
+		default:
+			return nil, errInvalidIdempotencyStatus
+		}
 	}
+
+	// New key inserted or existing key expired: proceed with creation
+	return nil, nil
 }
 
 func (r *reservationUseCaseImpl) createReservation(
@@ -189,6 +202,9 @@ func (r *reservationUseCaseImpl) createReservation(
 		validationResult.Note,
 	)
 	if err != nil {
+		if errors.Is(err, reservation.ErrLeadTimeNotMet) {
+			return nil, ErrInsufficientLeadTime
+		}
 		return nil, errs.Mark(err, ErrDomainValidation)
 	}
 
@@ -231,11 +247,6 @@ func (r *reservationUseCaseImpl) validateResourceAndCoupon(
 	resourceEntity, err := resource.NewResource(resourceRM.ID, resourceRM.Name, resourceRM.LeadTimeMin)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidation)
-	}
-
-	minLeadTime := time.Duration(resourceEntity.LeadTimeMin()) * time.Minute
-	if domainData.TimeSlot.Start().Before(r.clock.Now().Add(minLeadTime)) {
-		return nil, ErrInsufficientLeadTime
 	}
 
 	// Coupon validation (if provided)

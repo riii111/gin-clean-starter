@@ -41,7 +41,10 @@ func (r CreateReservationRequest) ToDomain() (*DomainConversion, error) {
 
 	noteValue := ""
 	if r.Note != nil {
-		noteValue = *r.Note
+		trimmed := strings.TrimSpace(*r.Note)
+		if trimmed != "" {
+			noteValue = trimmed
+		}
 	}
 
 	note, err := reservation.NewNote(noteValue)
