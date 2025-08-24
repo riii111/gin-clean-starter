@@ -1,6 +1,6 @@
 # Gin Clean Starter
 
-🏗️ **Go + Gin + Clean Architecture** — Production-ready booking system template with **idempotent APIs** & **race-safe reservations**
+🏗️ **Clean Architecture + CQRS + DDD + UoW (using Golang/Gin)** — Production-ready booking system template with **idempotent APIs** & **race-safe reservations**
 
 <p align="center">
   <img src="https://img.shields.io/badge/Go-1.24+-blue" />
