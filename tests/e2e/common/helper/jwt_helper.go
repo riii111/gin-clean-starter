@@ -4,7 +4,6 @@ package helper
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
 	"testing"
 	"time"
@@ -22,12 +21,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 )
-
-type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_in"`
-}
 
 type JWTTestHelper struct {
 	pool *pgxpool.Pool
@@ -79,11 +72,18 @@ func (h *JWTTestHelper) LoginUser(t *testing.T, router *gin.Engine, email, passw
 		request.LoginRequest{Email: email, Password: password}, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
-	var res LoginResponse
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&res))
-	require.NotEmpty(t, res.AccessToken)
+	// Extract access token from cookie instead of JSON response
+	cookies := w.Result().Cookies()
+	var accessToken string
+	for _, cookie := range cookies {
+		if cookie.Name == "access_token" {
+			accessToken = cookie.Value
+			break
+		}
+	}
+	require.NotEmpty(t, accessToken, "Access token not found in cookies")
 
-	return res.AccessToken
+	return accessToken
 }
 
 func (h *JWTTestHelper) CreateAndLogin(t *testing.T, router *gin.Engine, email, role string) string {

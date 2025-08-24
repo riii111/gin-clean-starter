@@ -5,6 +5,7 @@ package helper
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -31,6 +32,38 @@ func PerformRequest(t *testing.T, router *gin.Engine, method, path string, body 
 
 	if authToken != "" {
 		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+// PerformRequestWithCookies performs HTTP request with cookies support
+func PerformRequestWithCookies(t *testing.T, router *gin.Engine, method, path string, body any, cookies []*http.Cookie, authToken string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	var reqBody *bytes.Buffer
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(t, err, "Failed to encode request body to JSON")
+		reqBody = bytes.NewBuffer(jsonBody)
+	} else {
+		reqBody = bytes.NewBuffer(nil)
+	}
+
+	req := httptest.NewRequest(method, path, reqBody)
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	if authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+authToken)
+	}
+
+	// Add cookies to the request
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
 	}
 
 	w := httptest.NewRecorder()

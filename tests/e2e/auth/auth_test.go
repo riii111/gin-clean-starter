@@ -118,13 +118,28 @@ func (s *authSuite) TestLogin() {
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
-				// 成功時のレスポンス形式チェック
-				var loginRes jwtHelper.LoginResponse
+				// Check response contains user information
+				var loginRes struct {
+					User struct {
+						Email string `json:"email"`
+					} `json:"user"`
+				}
 				err := helper.DecodeResponseBody(t, w.Body, &loginRes)
 				require.NoError(t, err)
-				require.NotEmpty(t, loginRes.AccessToken, "アクセストークンが空")
-				require.NotEmpty(t, loginRes.RefreshToken, "リフレッシュトークンが空")
-				require.Greater(t, loginRes.ExpiresIn, int64(0), "有効期限が無効")
+				require.Equal(t, tt.email, loginRes.User.Email, "ユーザー情報が正しくない")
+
+				// Check cookies contain tokens
+				cookies := w.Result().Cookies()
+				var accessToken, refreshToken string
+				for _, cookie := range cookies {
+					if cookie.Name == "access_token" {
+						accessToken = cookie.Value
+					} else if cookie.Name == "refresh_token" {
+						refreshToken = cookie.Value
+					}
+				}
+				require.NotEmpty(t, accessToken, "アクセストークンがクッキーに設定されていない")
+				require.NotEmpty(t, refreshToken, "リフレッシュトークンがクッキーに設定されていない")
 
 				// last_loginが更新されることを確認
 				var lastLogin any
@@ -138,42 +153,43 @@ func (s *authSuite) TestLogin() {
 
 func (s *authSuite) TestRefresh() {
 	tests := []struct {
-		name              string
-		setupRefreshToken func() string
-		expectedStatus    int
-		description       string
+		name           string
+		setupCookies   func(t *testing.T) []*http.Cookie
+		expectedStatus int
+		description    string
 	}{
 		{
 			name: "正常なリフレッシュ",
-			setupRefreshToken: func() string {
-				// リフレッシュトークンを取得するため再度ログイン
+			setupCookies: func(t *testing.T) []*http.Cookie {
+				// ログインしてリフレッシュトークンを含むクッキーを取得
 				reqBody := request.LoginRequest{
 					Email:    "test@example.com",
 					Password: "password123",
 				}
-				w := helper.PerformRequest(s.T(), s.Router, http.MethodPost, loginURL, reqBody, "")
-				var loginRes jwtHelper.LoginResponse
-				helper.DecodeResponseBody(s.T(), w.Body, &loginRes)
-				return loginRes.RefreshToken
+				w := helper.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
+				require.Equal(t, http.StatusOK, w.Code)
+				return w.Result().Cookies()
 			},
 			expectedStatus: http.StatusOK,
 			description:    "有効なリフレッシュトークンでトークンが更新されること",
 		},
 		{
 			name: "無効なリフレッシュトークン",
-			setupRefreshToken: func() string {
-				return "invalid-refresh-token"
+			setupCookies: func(t *testing.T) []*http.Cookie {
+				return []*http.Cookie{
+					{Name: "refresh_token", Value: "invalid-refresh-token"},
+				}
 			},
 			expectedStatus: http.StatusUnauthorized,
 			description:    "無効なリフレッシュトークンは拒否されること",
 		},
 		{
 			name: "空のリフレッシュトークン",
-			setupRefreshToken: func() string {
-				return ""
+			setupCookies: func(t *testing.T) []*http.Cookie {
+				return []*http.Cookie{} // No cookies
 			},
-			expectedStatus: http.StatusBadRequest,
-			description:    "空のリフレッシュトークンは拒否されること",
+			expectedStatus: http.StatusUnauthorized,
+			description:    "リフレッシュトークンクッキーがない場合は拒否されること",
 		},
 	}
 
@@ -181,20 +197,33 @@ func (s *authSuite) TestRefresh() {
 		s.Run(tt.name, func() {
 			t := s.T()
 
-			refreshToken := tt.setupRefreshToken()
-			reqBody := request.RefreshRequest{
-				RefreshToken: refreshToken,
-			}
+			cookies := tt.setupCookies(t)
 
-			w := helper.PerformRequest(t, s.Router, http.MethodPost, refreshURL, reqBody, "")
+			// Create request with cookies using new helper function
+			w := helper.PerformRequestWithCookies(t, s.Router, http.MethodPost, refreshURL, nil, cookies, "")
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
-				var refreshRes jwtHelper.LoginResponse
+				// Check that response contains success message
+				var refreshRes struct {
+					Message string `json:"message"`
+				}
 				err := helper.DecodeResponseBody(t, w.Body, &refreshRes)
 				require.NoError(t, err)
-				require.NotEmpty(t, refreshRes.AccessToken, "新しいアクセストークンが空")
-				require.NotEmpty(t, refreshRes.RefreshToken, "新しいリフレッシュトークンが空")
+				require.Equal(t, "Token refreshed successfully", refreshRes.Message)
+
+				// Check that new tokens are set in cookies
+				cookies := w.Result().Cookies()
+				var newAccessToken, newRefreshToken string
+				for _, cookie := range cookies {
+					if cookie.Name == "access_token" {
+						newAccessToken = cookie.Value
+					} else if cookie.Name == "refresh_token" {
+						newRefreshToken = cookie.Value
+					}
+				}
+				require.NotEmpty(t, newAccessToken, "新しいアクセストークンがクッキーに設定されていない")
+				require.NotEmpty(t, newRefreshToken, "新しいリフレッシュトークンがクッキーに設定されていない")
 			}
 		})
 	}
