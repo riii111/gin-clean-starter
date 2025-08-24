@@ -59,7 +59,7 @@ func (h *JWTTestHelper) CreateTestUserWithDB(t *testing.T, db DBLike, email, rol
 	err := db.QueryRow(ctx, "SELECT id FROM companies WHERE name = 'Default Company' LIMIT 1").Scan(&companyID)
 	require.NoError(t, err)
 
-	passwordHash := "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj2hCBQWqRU6"
+	passwordHash := "$2a$12$uhAjVE9f92IGYv3E25pJNetg.27lVt0p7jmLWjqjmhOg92ldPS0A."
 	tag, err := db.Exec(ctx, "INSERT INTO users (id, email, password_hash, role, company_id, is_active) VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT (email) WHERE is_active = true DO NOTHING",
 		userID, email, passwordHash, role, companyID)
 	require.NoError(t, err)

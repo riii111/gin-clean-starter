@@ -345,6 +345,11 @@ func startGenericContainer(req testcontainers.ContainerRequest, timeoutSec int) 
 // ------------------------------------------------------------
 func startPostgreSQLContainerOnce(t *testing.T) {
 	postgresContainerOnce.Do(func() {
+		// testcontainers Docker-in-Docker configuration
+		_ = os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
+		_ = os.Setenv("RYUK_DISABLED", "true")
+		_ = os.Setenv("DOCKER_HOST", "unix:///var/run/docker.sock")
+		
 		req := testcontainers.ContainerRequest{
 			Image:        "postgres:17",
 			ExposedPorts: []string{"5432/tcp"},

@@ -107,11 +107,11 @@ INSERT INTO companies (id, name) VALUES
     (gen_random_uuid(), 'Default Company'),
     (gen_random_uuid(), 'Test Company');
 
--- Insert test user (password: 'password123!')
+-- Insert test user (password: 'password123')
 INSERT INTO users (email, password_hash, role, company_id) 
 SELECT 
     'test@example.com' AS email,
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj2hCBQWqRU6' AS password_hash, -- bcrypt hash of password123
+    '$2a$12$uhAjVE9f92IGYv3E25pJNetg.27lVt0p7jmLWjqjmhOg92ldPS0A.' AS password_hash, -- bcrypt hash of password123
     'admin' AS "role",
     companies.id AS company_id
 FROM companies 

@@ -24,14 +24,23 @@ services:
         condition: service_healthy
     env_file:
       - .env
+    # testcontainersでホスト名を解決するため
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       DB_HOST: db
       DB_PORT: 5432
       DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
+      # testcontainers Docker-in-Docker configuration
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+      DOCKER_HOST: unix:///var/run/docker.sock
     ports:
       - "8888:8888"
     volumes:
       - ./:/app:cached
+      # Docker socket mount for testcontainers (development/testing only)
+      - /var/run/docker.sock:/var/run/docker.sock
 
   db-migrate:
     build:
