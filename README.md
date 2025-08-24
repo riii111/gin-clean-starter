@@ -31,7 +31,6 @@ cd gin-clean-starter
 mise install && mise run install       # Install tools & dependencies
 mise run up                            # Start PostgreSQL
 mise run migrate:up                    # Apply schema
-mise run dev-local                     # Start server (http://localhost:8888)
 ```
 
 ---
@@ -62,7 +61,6 @@ mise run sqlc:gen          # Regenerate type-safe DB code
 
 | Task | Command | Description |
 |------|---------|-------------|
-| **Dev** | `mise run dev` | Full environment with hot-reload |
 | **Test** | `mise run test-all` | Unit + E2E tests |
 | **Lint** | `mise run lint:fix` | Auto-fix code issues |
 | **Build** | `mise run build` | Docker images |
