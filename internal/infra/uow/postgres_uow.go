@@ -56,6 +56,10 @@ func (u *PostgresUoW) WithDB(ctx context.Context, fn func(ctx context.Context, d
 	return fn(ctx, u.pool)
 }
 
+func (u *PostgresUoW) CommandReads() shared.CommandReads {
+	return &commandReads{uow: u, dbtx: u.pool}
+}
+
 // Avoids defer accumulation in retry loops to prevent connection leaks
 func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOptions, fn func(ctx context.Context, tx shared.Tx) error) error {
 	const maxRetries = 3

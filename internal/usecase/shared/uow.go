@@ -17,6 +17,8 @@ type UnitOfWork interface {
 	WithinReadOnly(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
 	// WithDB: Single query operations using implicit transactions
 	WithDB(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
+	// CommandReads: Direct access to command reads for validation outside transactions
+	CommandReads() CommandReads
 }
 
 type Tx interface {

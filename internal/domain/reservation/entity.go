@@ -56,8 +56,8 @@ func (r *Reservation) IsCanceled() bool {
 	return r.status == StatusCanceled
 }
 
-func (r *Reservation) HasExpired() bool {
-	return time.Now().After(r.timeSlot.End())
+func (r *Reservation) HasExpired(now time.Time) bool {
+	return now.After(r.timeSlot.End())
 }
 
 func (r *Reservation) ID() uuid.UUID         { return r.id }

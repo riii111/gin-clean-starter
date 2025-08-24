@@ -18,10 +18,6 @@ type ReservationViewQueries interface {
 	GetReservationsByUserIDKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDKeysetParams) ([]sqlc.GetReservationsByUserIDKeysetRow, error)
 }
 
-type ReservationStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error)
-}
-
 type ReservationReadStore struct {
 	queries ReservationViewQueries
 	db      sqlc.DBTX

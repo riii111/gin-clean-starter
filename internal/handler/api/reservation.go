@@ -24,6 +24,25 @@ var (
 	ErrInvalidReservationIDFormat  = errs.New("invalid reservation ID format")
 )
 
+type createReservationErrorRule struct {
+	err     error
+	status  int
+	message string
+	extra   map[string]string
+}
+
+var createReservationErrorRules = []createReservationErrorRule{
+	{commands.ErrResourceNotFound, http.StatusNotFound, "Resource not found", nil},
+	{commands.ErrCouponNotFound, http.StatusNotFound, "Coupon not found", nil},
+	{commands.ErrInvalidTimeSlot, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrInsufficientLeadTime, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrInvalidCoupon, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrDomainValidation, http.StatusBadRequest, "Invalid request parameters", nil},
+	{commands.ErrDuplicateReservation, http.StatusConflict, "Reservation conflict", nil},
+	{commands.ErrReservationConflict, http.StatusConflict, "Reservation conflict", nil},
+	{commands.ErrIdempotencyInProgress, http.StatusAccepted, "Reservation request is currently being processed", map[string]string{"retry_after": "2"}},
+}
+
 type ReservationHandler struct {
 	reservationCommands commands.ReservationCommands
 	reservationQueries  queries.ReservationQueries
@@ -34,6 +53,23 @@ func NewReservationHandler(reservationCommands commands.ReservationCommands, res
 		reservationCommands: reservationCommands,
 		reservationQueries:  reservationQueries,
 	}
+}
+
+func (h *ReservationHandler) handleCreateReservationError(c *gin.Context, err error, idempotencyKey uuid.UUID) {
+	for _, rule := range createReservationErrorRules {
+		if errors.Is(err, rule.err) {
+			if errors.Is(err, commands.ErrIdempotencyInProgress) {
+				slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
+			} else {
+				slog.Warn("Create reservation error", "error", err, "status", rule.status)
+			}
+			httperr.AbortWithError(c, rule.status, err, rule.message, rule.extra)
+			return
+		}
+	}
+
+	slog.Error("Unexpected error in create reservation", "error", err)
+	httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal server error", nil)
 }
 
 // @Summary Create reservation
@@ -79,40 +115,14 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 
 	result, err := h.reservationCommands.CreateReservation(c.Request.Context(), req, userID, idempotencyKey)
 	if err != nil {
-		switch {
-		case errors.Is(err, commands.ErrResourceNotFound),
-			errors.Is(err, commands.ErrCouponNotFound):
-			slog.Warn("Resource not found", "error", err)
-			httperr.AbortWithError(c, http.StatusNotFound, err,
-				"Resource not found", nil)
-		case errors.Is(err, commands.ErrInvalidTimeSlot),
-			errors.Is(err, commands.ErrInsufficientLeadTime),
-			errors.Is(err, commands.ErrInvalidCoupon),
-			errors.Is(err, commands.ErrDomainValidation):
-			slog.Warn("Bad request", "error", err)
-			httperr.AbortWithError(c, http.StatusBadRequest, err,
-				"Invalid request parameters", nil)
-		case errors.Is(err, commands.ErrDuplicateReservation),
-			errors.Is(err, commands.ErrReservationConflict):
-			slog.Warn("Conflict", "error", err)
-			httperr.AbortWithError(c, http.StatusConflict, err,
-				"Reservation conflict", nil)
-		case errors.Is(err, commands.ErrIdempotencyInProgress):
-			slog.Info("Reservation request in progress", "idempotency_key", idempotencyKey)
-			httperr.AbortWithError(c, http.StatusAccepted, err,
-				"Reservation request is currently being processed", map[string]string{"retry_after": "2"})
-		default:
-			slog.Error("Unexpected error in create reservation", "error", err)
-			httperr.AbortWithError(c, http.StatusInternalServerError, err,
-				"Internal server error", nil)
-		}
+		h.handleCreateReservationError(c, err, idempotencyKey)
 		return
 	}
 
-	reservationView, err := h.reservationQueries.GetByID(c, result.ReservationID, userID)
+	reservationView, err := h.reservationQueries.GetByID(c.Request.Context(), userID, result.ReservationID)
 	if err != nil {
 		httperr.AbortWithError(c, http.StatusInternalServerError, err,
-			"Failed to retrieve created reservation", "RESERVATION_QUERY_FAILED")
+			"Failed to retrieve created reservation", map[string]string{"code": "RESERVATION_QUERY_FAILED"})
 		return
 	}
 
