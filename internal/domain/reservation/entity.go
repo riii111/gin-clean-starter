@@ -4,8 +4,6 @@ import (
 	"errors"
 	"time"
 
-	"gin-clean-starter/internal/domain/coupon"
-	"gin-clean-starter/internal/domain/resource"
 	"gin-clean-starter/internal/pkg/clock"
 
 	"github.com/google/uuid"
@@ -17,7 +15,25 @@ var (
 	ErrNegativePrice       = errors.New("price cannot be negative")
 	ErrReservationCanceled = errors.New("reservation is already canceled")
 	ErrInvalidStatus       = errors.New("invalid reservation status")
+	ErrInvalidCoupon       = errors.New("invalid coupon")
 )
+
+type ResourceSpec struct {
+	ID          uuid.UUID
+	LeadTimeMin int
+}
+
+type CouponSpec struct {
+	ID             uuid.UUID
+	AmountOffCents *int32
+	PercentOff     *float64
+	ValidFrom      *time.Time
+	ValidTo        *time.Time
+}
+
+type ResourcePriceContext struct {
+	ResourceID uuid.UUID
+}
 
 type Services struct {
 	Clock           clock.Clock
@@ -25,7 +41,7 @@ type Services struct {
 }
 
 type PriceCalculator interface {
-	CalculatePriceCents(res *resource.Resource, slot TimeSlot) int64
+	CalculatePriceCents(ctx ResourcePriceContext, slot TimeSlot) int64
 }
 
 type Reservation struct {
@@ -43,39 +59,44 @@ type Reservation struct {
 
 func NewReservation(
 	services *Services,
-	resourceEntity *resource.Resource,
+	res ResourceSpec,
 	userID uuid.UUID,
 	slot TimeSlot,
-	couponEntity *coupon.Coupon,
+	coup *CouponSpec,
 	note Note,
 ) (*Reservation, error) {
-	if err := slot.ValidateLeadTimeAt(services.Clock.Now(), resourceEntity.LeadTimeMin()); err != nil {
+	lead := res.LeadTimeMin
+	if lead < 0 {
+		lead = 0
+	}
+	if err := slot.ValidateLeadTimeAt(services.Clock.Now(), lead); err != nil {
 		return nil, err
 	}
 
-	basePriceCents := services.PriceCalculator.CalculatePriceCents(resourceEntity, slot)
-	if basePriceCents < 0 {
+	base := services.PriceCalculator.CalculatePriceCents(ResourcePriceContext{ResourceID: res.ID}, slot)
+	if base < 0 {
 		return nil, ErrNegativePrice
 	}
 
-	if couponEntity != nil {
-		if err := couponEntity.ValidateUsage(services.Clock.Now()); err != nil {
-			return nil, err
+	if coup != nil {
+		now := services.Clock.Now()
+		if (coup.ValidFrom != nil && now.Before(*coup.ValidFrom)) ||
+			(coup.ValidTo != nil && now.After(*coup.ValidTo)) {
+			return nil, ErrInvalidCoupon
 		}
-		basePriceCents = couponEntity.ApplyDiscount(basePriceCents)
+		base = applyDiscount(base, coup.AmountOffCents, coup.PercentOff)
 	}
 
-	price := NewMoney(basePriceCents)
-
+	price := NewMoney(base)
 	var couponID *uuid.UUID
-	if couponEntity != nil {
-		id := couponEntity.ID()
+	if coup != nil {
+		id := coup.ID
 		couponID = &id
 	}
 
 	return &Reservation{
 		id:         uuid.New(),
-		resourceID: resourceEntity.ID(),
+		resourceID: res.ID,
 		userID:     userID,
 		timeSlot:   slot,
 		status:     StatusConfirmed,
@@ -141,8 +162,22 @@ func NewDefaultPriceCalculator() *DefaultPriceCalculator {
 	}
 }
 
-func (pc *DefaultPriceCalculator) CalculatePriceCents(_ *resource.Resource, slot TimeSlot) int64 {
+func (pc *DefaultPriceCalculator) CalculatePriceCents(_ ResourcePriceContext, slot TimeSlot) int64 {
 	duration := slot.Duration()
 	hours := duration.Hours()
 	return int64(hours * float64(pc.HourlyRateCents))
+}
+
+func applyDiscount(base int64, amountOff *int32, percentOff *float64) int64 {
+	result := base
+	if amountOff != nil {
+		result -= int64(*amountOff)
+	}
+	if percentOff != nil {
+		result = int64(float64(result) * (100.0 - *percentOff) / 100.0)
+	}
+	if result < 0 {
+		result = 0
+	}
+	return result
 }

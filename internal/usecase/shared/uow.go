@@ -51,6 +51,7 @@ type ReservationRepository interface {
 type IdempotencyRepository interface {
 	TryInsert(ctx context.Context, tx sqlc.DBTX, key, userID uuid.UUID, endpoint, requestHash string, expiresAt time.Time) error
 	UpdateStatusCompleted(ctx context.Context, tx sqlc.DBTX, key, userID uuid.UUID, resultHash string, reservationID uuid.UUID) error
+	ClaimExpiredIdempotencyKey(ctx context.Context, tx sqlc.DBTX, key, userID uuid.UUID, requestHash string, expiresAt time.Time) (int64, error)
 }
 
 type NotificationRepository interface {

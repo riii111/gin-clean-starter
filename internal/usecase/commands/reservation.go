@@ -9,9 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"gin-clean-starter/internal/domain/coupon"
 	"gin-clean-starter/internal/domain/reservation"
-	"gin-clean-starter/internal/domain/resource"
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/pkg/clock"
@@ -46,7 +44,6 @@ var (
 
 // Private errors - internal use only
 var (
-	errIdempotencyCheckFailed     = errs.New("idempotency check failed")
 	errDatabaseOperationFailed    = errs.New("database operation failed")
 	errMissingResultReservationID = errs.New("completed request missing result reservation ID")
 	errInvalidIdempotencyStatus   = errs.New("invalid idempotency key status")
@@ -57,11 +54,9 @@ type CreateReservationResult struct {
 	IsReplayed    bool
 }
 
-type ValidationResult struct {
-	Resource *resource.Resource
-	Coupon   *coupon.Coupon
-	TimeSlot reservation.TimeSlot
-	Note     reservation.Note
+type Snapshots struct {
+	Resource shared.ResourceSnapshot
+	Coupon   *shared.CouponSnapshot
 }
 
 type ReservationCommands interface {
@@ -97,7 +92,7 @@ func (r *reservationUseCaseImpl) CreateReservation(
 		return nil, errs.Mark(err, ErrInvalidTimeSlot)
 	}
 
-	validationResult, err := r.validateResourceAndCoupon(ctx, req, domainData)
+	snapshots, err := r.loadSnapshots(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +117,7 @@ func (r *reservationUseCaseImpl) CreateReservation(
 		}
 
 		var reservationID *uuid.UUID
-		reservationID, err = r.createReservation(ctx, tx, validationResult, userID, idempotencyKey)
+		reservationID, err = r.createReservation(ctx, tx, snapshots, domainData.TimeSlot, domainData.Note, userID, idempotencyKey)
 		if err != nil {
 			return err
 		}
@@ -157,12 +152,21 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	if !inserted {
 		existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
 		if err != nil {
-			return nil, errs.Mark(err, errIdempotencyCheckFailed)
+			return nil, errs.Mark(err, errors.New("failed to read existing idempotency key"))
 		}
 
-		// Treat expired keys as non-existent (allows new creation)
 		if existing.ExpiresAt.Before(r.clock.Now()) {
-			return nil, nil
+			rowsAffected, err := tx.Idempotency().ClaimExpiredIdempotencyKey(ctx, tx.DB(), idempotencyKey, userID, requestHash, expiresAt)
+			if err != nil {
+				return nil, errs.Mark(err, errors.New("failed to claim expired idempotency key"))
+			}
+			if rowsAffected > 0 {
+				return nil, nil
+			}
+			existing, err = tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
+			if err != nil {
+				return nil, errs.Mark(err, errors.New("failed to re-read idempotency key after claim attempt"))
+			}
 		}
 
 		switch existing.Status {
@@ -190,20 +194,33 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 func (r *reservationUseCaseImpl) createReservation(
 	ctx context.Context,
 	tx shared.Tx,
-	validationResult *ValidationResult,
+	snapshots Snapshots,
+	slot reservation.TimeSlot,
+	note reservation.Note,
 	userID, idempotencyKey uuid.UUID,
 ) (*uuid.UUID, error) {
-	reservationEntity, err := reservation.NewReservation(
-		r.services,
-		validationResult.Resource,
-		userID,
-		validationResult.TimeSlot,
-		validationResult.Coupon,
-		validationResult.Note,
-	)
+	resSpec := reservation.ResourceSpec{
+		ID:          snapshots.Resource.ID,
+		LeadTimeMin: snapshots.Resource.LeadTimeMin,
+	}
+	var coupSpec *reservation.CouponSpec
+	if snapshots.Coupon != nil {
+		coupSpec = &reservation.CouponSpec{
+			ID:             snapshots.Coupon.ID,
+			AmountOffCents: snapshots.Coupon.AmountOffCents,
+			PercentOff:     snapshots.Coupon.PercentOff,
+			ValidFrom:      snapshots.Coupon.ValidFrom,
+			ValidTo:        snapshots.Coupon.ValidTo,
+		}
+	}
+
+	reservationEntity, err := reservation.NewReservation(r.services, resSpec, userID, slot, coupSpec, note)
 	if err != nil {
 		if errors.Is(err, reservation.ErrLeadTimeNotMet) {
 			return nil, ErrInsufficientLeadTime
+		}
+		if errors.Is(err, reservation.ErrInvalidCoupon) {
+			return nil, ErrInvalidCoupon
 		}
 		return nil, errs.Mark(err, ErrDomainValidation)
 	}
@@ -229,60 +246,36 @@ func (r *reservationUseCaseImpl) createReservation(
 	return &reservationID, nil
 }
 
-func (r *reservationUseCaseImpl) validateResourceAndCoupon(
+// loadSnapshots loads resource and coupon data as snapshots without validation.
+// Domain validation is performed within the Reservation aggregate.
+func (r *reservationUseCaseImpl) loadSnapshots(
 	ctx context.Context,
 	req reqdto.CreateReservationRequest,
-	domainData *reqdto.DomainConversion,
-) (*ValidationResult, error) {
-	reads := r.uow.CommandReads()
+) (Snapshots, error) {
+	var snapshots Snapshots
 
-	resourceRM, err := reads.ResourceByID(ctx, req.ResourceID)
+	rs, err := r.uow.CommandReads().ResourceByID(ctx, req.ResourceID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, ErrResourceNotFound
+			return snapshots, ErrResourceNotFound
 		}
-		return nil, errs.Mark(err, errDatabaseOperationFailed)
+		return snapshots, errs.Mark(err, errDatabaseOperationFailed)
 	}
+	snapshots.Resource = *rs
 
-	resourceEntity, err := resource.NewResource(resourceRM.ID, resourceRM.Name, resourceRM.LeadTimeMin)
-	if err != nil {
-		return nil, errs.Mark(err, ErrDomainValidation)
-	}
-
-	// Coupon validation (if provided)
-	var couponEntity *coupon.Coupon
-	if couponCode := req.GetCouponCode(); couponCode != nil {
-		couponRM, err := reads.CouponByCode(ctx, *couponCode)
+	if code := req.GetCouponCode(); code != nil {
+		normalizedCode := strings.ToLower(*code)
+		cs, err := r.uow.CommandReads().CouponByCode(ctx, normalizedCode)
 		if err != nil {
 			if infra.IsKind(err, infra.KindNotFound) {
-				return nil, ErrCouponNotFound
+				return snapshots, ErrCouponNotFound
 			}
-			return nil, errs.Mark(err, errDatabaseOperationFailed)
+			return snapshots, errs.Mark(err, errDatabaseOperationFailed)
 		}
-
-		couponEntity, err = coupon.NewCoupon(
-			couponRM.ID,
-			couponRM.Code,
-			couponRM.AmountOffCents,
-			couponRM.PercentOff,
-			couponRM.ValidFrom,
-			couponRM.ValidTo,
-		)
-		if err != nil {
-			return nil, errs.Mark(err, ErrInvalidCoupon)
-		}
-
-		if err := couponEntity.ValidateUsage(r.clock.Now()); err != nil {
-			return nil, ErrInvalidCoupon
-		}
+		snapshots.Coupon = cs
 	}
 
-	return &ValidationResult{
-		Resource: resourceEntity,
-		Coupon:   couponEntity,
-		TimeSlot: domainData.TimeSlot,
-		Note:     domainData.Note,
-	}, nil
+	return snapshots, nil
 }
 
 func (r *reservationUseCaseImpl) createNotificationJobByID(
