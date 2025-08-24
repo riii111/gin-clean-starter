@@ -39,16 +39,14 @@ func (r CreateReservationRequest) ToDomain() (*DomainConversion, error) {
 		return nil, err
 	}
 
-	note, err := reservation.NewNote("")
-	if err != nil {
-		return nil, err
 	noteValue := ""
+	if r.Note != nil {
+		noteValue = *r.Note
 	}
 
-		note, err = reservation.NewNote(*r.Note)
-		if err != nil {
-			return nil, err
-		}
+	note, err := reservation.NewNote(noteValue)
+	if err != nil {
+		return nil, err
 	}
 
 	return &DomainConversion{
