@@ -11,28 +11,28 @@ import (
 
 type ReservationResponse struct {
 	ID           uuid.UUID  `json:"id"`
-	ResourceID   uuid.UUID  `json:"resource_id"`
-	ResourceName string     `json:"resource_name"`
-	UserID       uuid.UUID  `json:"user_id"`
-	UserEmail    string     `json:"user_email"`
+	ResourceID   uuid.UUID  `json:"resourceId"`
+	ResourceName string     `json:"resourceName"`
+	UserID       uuid.UUID  `json:"userId"`
+	UserEmail    string     `json:"userEmail"`
 	Slot         string     `json:"slot"`
 	Status       string     `json:"status"`
-	PriceCents   int32      `json:"price_cents"`
-	CouponID     *uuid.UUID `json:"coupon_id,omitempty"`
-	CouponCode   *string    `json:"coupon_code,omitempty"`
+	PriceCents   int32      `json:"priceCents"`
+	CouponID     *uuid.UUID `json:"couponId,omitempty"`
+	CouponCode   *string    `json:"couponCode,omitempty"`
 	Note         *string    `json:"note,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 type ReservationListResponse struct {
 	ID           uuid.UUID `json:"id"`
-	ResourceID   uuid.UUID `json:"resource_id"`
-	ResourceName string    `json:"resource_name"`
+	ResourceID   uuid.UUID `json:"resourceId"`
+	ResourceName string    `json:"resourceName"`
 	Slot         string    `json:"slot"`
 	Status       string    `json:"status"`
-	PriceCents   int32     `json:"price_cents"`
-	CreatedAt    time.Time `json:"created_at"`
+	PriceCents   int32     `json:"priceCents"`
+	CreatedAt    time.Time `json:"createdAt"`
 }
 
 func FromReservationView(rm *queries.ReservationView) *ReservationResponse {

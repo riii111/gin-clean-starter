@@ -2,7 +2,6 @@ package api
 
 import (
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -173,7 +172,7 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 		return
 	}
 
-	etag := fmt.Sprintf(`W/"%s-%d"`, reservationRM.ID, reservationRM.UpdatedAt.UnixNano())
+	etag := h.reservationQueries.GenerateETag(reservationRM)
 	if match := c.GetHeader("If-None-Match"); match == etag {
 		c.Status(http.StatusNotModified)
 		return

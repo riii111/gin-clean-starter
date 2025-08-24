@@ -10,10 +10,10 @@ import (
 )
 
 type CreateReservationRequest struct {
-	ResourceID uuid.UUID `json:"resource_id" binding:"required"`
-	StartTime  time.Time `json:"start_time" binding:"required"`
-	EndTime    time.Time `json:"end_time" binding:"required"`
-	CouponCode *string   `json:"coupon_code,omitempty"`
+	ResourceID uuid.UUID `json:"resourceId" binding:"required"`
+	StartTime  time.Time `json:"startTime" binding:"required"`
+	EndTime    time.Time `json:"endTime" binding:"required"`
+	CouponCode *string   `json:"couponCode,omitempty"`
 	Note       *string   `json:"note,omitempty"`
 }
 
@@ -42,9 +42,9 @@ func (r CreateReservationRequest) ToDomain() (*DomainConversion, error) {
 	note, err := reservation.NewNote("")
 	if err != nil {
 		return nil, err
+	noteValue := ""
 	}
 
-	if r.Note != nil {
 		note, err = reservation.NewNote(*r.Note)
 		if err != nil {
 			return nil, err
