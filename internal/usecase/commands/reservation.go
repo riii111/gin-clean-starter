@@ -144,7 +144,7 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	inserted := true
 	if err := tx.Idempotency().TryInsert(ctx, tx.DB(), idempotencyKey, userID, EndpointCreateReservation, requestHash, expiresAt); err != nil {
 		if !infra.IsKind(err, infra.KindConflict) {
-			return nil, errs.Mark(err, errIdempotencyCheckFailed)
+			return nil, errs.Mark(err, errors.New("failed to insert idempotency key"))
 		}
 		inserted = false
 	}

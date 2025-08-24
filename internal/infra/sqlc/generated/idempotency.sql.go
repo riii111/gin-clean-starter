@@ -12,6 +12,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const claimExpiredIdempotencyKey = `-- name: ClaimExpiredIdempotencyKey :execrows
+UPDATE idempotency_keys
+SET
+  status = 'processing',
+  request_hash = $3,
+  expires_at = $4,
+  updated_at = NOW()
+WHERE
+  key = $1
+  AND user_id = $2
+  AND status <> 'completed'
+  AND expires_at < NOW()
+`
+
+type ClaimExpiredIdempotencyKeyParams struct {
+	Key         uuid.UUID          `json:"key"`
+	UserID      uuid.UUID          `json:"user_id"`
+	RequestHash string             `json:"request_hash"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) ClaimExpiredIdempotencyKey(ctx context.Context, db DBTX, arg ClaimExpiredIdempotencyKeyParams) (int64, error) {
+	result, err := db.Exec(ctx, claimExpiredIdempotencyKey,
+		arg.Key,
+		arg.UserID,
+		arg.RequestHash,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteExpiredIdempotencyKeys = `-- name: DeleteExpiredIdempotencyKeys :execrows
 DELETE FROM idempotency_keys 
 WHERE expires_at < NOW()
@@ -75,7 +109,6 @@ INSERT INTO idempotency_keys (
 ) VALUES (
     $1, $2, $3, $4, 'processing', $5
 )
-ON CONFLICT (key, user_id) DO NOTHING
 `
 
 type TryInsertIdempotencyKeyParams struct {

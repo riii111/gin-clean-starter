@@ -8,8 +8,7 @@ INSERT INTO idempotency_keys (
     expires_at
 ) VALUES (
     $1, $2, $3, $4, 'processing', $5
-)
-ON CONFLICT (key, user_id) DO NOTHING;
+);
 
 -- name: GetIdempotencyKey :one
 SELECT 
@@ -38,3 +37,16 @@ WHERE key = $1 AND user_id = $2;
 -- name: DeleteExpiredIdempotencyKeys :execrows
 DELETE FROM idempotency_keys 
 WHERE expires_at < NOW();
+
+-- name: ClaimExpiredIdempotencyKey :execrows
+UPDATE idempotency_keys
+SET
+  status = 'processing',
+  request_hash = $3,
+  expires_at = $4,
+  updated_at = NOW()
+WHERE
+  key = $1
+  AND user_id = $2
+  AND status <> 'completed'
+  AND expires_at < NOW();

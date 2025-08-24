@@ -16,6 +16,7 @@ type IdempotencyWriteQueries interface {
 	GetIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.GetIdempotencyKeyParams) (sqlc.IdempotencyKeys, error)
 	UpdateIdempotencyKeyCompleted(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateIdempotencyKeyCompletedParams) error
 	DeleteExpiredIdempotencyKeys(ctx context.Context, db sqlc.DBTX) (int64, error)
+	ClaimExpiredIdempotencyKey(ctx context.Context, db sqlc.DBTX, arg sqlc.ClaimExpiredIdempotencyKeyParams) (int64, error)
 }
 
 type IdempotencyRepository struct {
@@ -61,6 +62,22 @@ func (r *IdempotencyRepository) UpdateStatusCompleted(ctx context.Context, tx sq
 	}
 
 	return nil
+}
+
+func (r *IdempotencyRepository) ClaimExpiredIdempotencyKey(ctx context.Context, tx sqlc.DBTX, key uuid.UUID, userID uuid.UUID, requestHash string, expiresAt time.Time) (int64, error) {
+	params := sqlc.ClaimExpiredIdempotencyKeyParams{
+		Key:         key,
+		UserID:      userID,
+		RequestHash: requestHash,
+		ExpiresAt:   pgconv.TimeToPgtype(expiresAt),
+	}
+
+	rowsAffected, err := r.queries.ClaimExpiredIdempotencyKey(ctx, tx, params)
+	if err != nil {
+		return 0, infra.WrapRepoErr("failed to claim expired idempotency key", err)
+	}
+
+	return rowsAffected, nil
 }
 
 func (r *IdempotencyRepository) DeleteExpired(ctx context.Context) (int64, error) {
