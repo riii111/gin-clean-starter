@@ -2,6 +2,7 @@ package readstore
 
 import (
 	"context"
+	"time"
 
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
@@ -13,8 +14,6 @@ import (
 
 type ReservationViewQueries interface {
 	GetReservationByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReservationByIDRow, error)
-	GetReservationsByUserID(ctx context.Context, db sqlc.DBTX, userID uuid.UUID) ([]sqlc.GetReservationsByUserIDRow, error)
-	GetReservationsByUserIDPaginated(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDPaginatedParams) ([]sqlc.GetReservationsByUserIDPaginatedRow, error)
 	GetReservationsByUserIDFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDFirstPageParams) ([]sqlc.GetReservationsByUserIDFirstPageRow, error)
 	GetReservationsByUserIDKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReservationsByUserIDKeysetParams) ([]sqlc.GetReservationsByUserIDKeysetRow, error)
 }
@@ -79,6 +78,27 @@ func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, userID
 	result := make([]*queries.ReservationListItem, len(rows))
 	for i, row := range rows {
 		result[i] = toReservationListItemFromUserFirstPageRow(row)
+	}
+
+	return result, nil
+}
+
+func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
+	params := sqlc.GetReservationsByUserIDKeysetParams{
+		UserID:    userID,
+		CreatedAt: pgconv.TimeToPgtype(lastCreatedAt),
+		ID:        lastID,
+		Limit:     limit,
+	}
+
+	rows, err := r.queries.GetReservationsByUserIDKeyset(ctx, r.db, params)
+	if err != nil {
+		return nil, infra.WrapRepoErr("failed to find reservations keyset", err)
+	}
+
+	result := make([]*queries.ReservationListItem, len(rows))
+	for i, row := range rows {
+		result[i] = toReservationListItemFromUserKeysetRow(row)
 	}
 
 	return result, nil
