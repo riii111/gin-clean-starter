@@ -11,8 +11,11 @@ import (
 )
 
 type UnitOfWork interface {
+	// Within: Full transaction for write operations with retry logic
 	Within(ctx context.Context, fn func(ctx context.Context, tx Tx) error) error
+	// WithinReadOnly: Read-only transaction for multi-table consistent reads
 	WithinReadOnly(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
+	// WithDB: Single query operations using implicit transactions
 	WithDB(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
 }
 
@@ -31,12 +34,11 @@ type CommandReads interface {
 	IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*IdempotencyRecord, error)
 }
 
+// Minimal snapshot for command read operations
 type ReservationSnapshot struct {
 	ID         uuid.UUID
 	ResourceID uuid.UUID
 	UserID     uuid.UUID
-	StartTime  time.Time
-	EndTime    time.Time
 	Status     string
 }
 

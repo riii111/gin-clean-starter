@@ -2,7 +2,6 @@ package readstore
 
 import (
 	"context"
-	"time"
 
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
@@ -48,40 +47,6 @@ func (r *ReservationReadStore) FindByID(ctx context.Context, id uuid.UUID) (*que
 	return rowToReservationView(row), nil
 }
 
-func (r *ReservationReadStore) FindByUserID(ctx context.Context, userID uuid.UUID) ([]*queries.ReservationListItem, error) {
-	rows, err := r.queries.GetReservationsByUserID(ctx, r.db, userID)
-	if err != nil {
-		return nil, infra.WrapRepoErr("failed to find reservations by user ID", err)
-	}
-
-	result := make([]*queries.ReservationListItem, len(rows))
-	for i, row := range rows {
-		result[i] = toReservationListItemFromUserRow(row)
-	}
-
-	return result, nil
-}
-
-func (r *ReservationReadStore) FindByUserIDPaginated(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]*queries.ReservationListItem, error) {
-	params := sqlc.GetReservationsByUserIDPaginatedParams{
-		UserID: userID,
-		Limit:  limit,
-		Offset: offset,
-	}
-
-	rows, err := r.queries.GetReservationsByUserIDPaginated(ctx, r.db, params)
-	if err != nil {
-		return nil, infra.WrapRepoErr("failed to find reservations by user ID with pagination", err)
-	}
-
-	result := make([]*queries.ReservationListItem, len(rows))
-	for i, row := range rows {
-		result[i] = toReservationListItemFromUserPaginatedRow(row)
-	}
-
-	return result, nil
-}
-
 func rowToReservationView(row sqlc.GetReservationByIDRow) *queries.ReservationView {
 	return &queries.ReservationView{
 		ID:           row.ID,
@@ -98,52 +63,6 @@ func rowToReservationView(row sqlc.GetReservationByIDRow) *queries.ReservationVi
 		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
 		UpdatedAt:    pgconv.TimeFromPgtype(row.UpdatedAt),
 	}
-}
-
-func toReservationListItemFromUserRow(row sqlc.GetReservationsByUserIDRow) *queries.ReservationListItem {
-	return &queries.ReservationListItem{
-		ID:           row.ID,
-		ResourceID:   row.ResourceID,
-		ResourceName: row.ResourceName,
-		Slot:         row.Slot,
-		Status:       row.Status,
-		PriceCents:   row.PriceCents,
-		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
-	}
-}
-
-func toReservationListItemFromUserPaginatedRow(row sqlc.GetReservationsByUserIDPaginatedRow) *queries.ReservationListItem {
-	return &queries.ReservationListItem{
-		ID:           row.ID,
-		ResourceID:   row.ResourceID,
-		ResourceName: row.ResourceName,
-		Slot:         row.Slot,
-		Status:       row.Status,
-		PriceCents:   row.PriceCents,
-		CreatedAt:    pgconv.TimeFromPgtype(row.CreatedAt),
-	}
-}
-
-// FindByUserIDKeyset finds reservations by user ID using keyset pagination
-func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
-	params := sqlc.GetReservationsByUserIDKeysetParams{
-		UserID:    userID,
-		CreatedAt: pgconv.TimeToPgtype(lastCreatedAt),
-		ID:        lastID,
-		Limit:     limit,
-	}
-
-	rows, err := r.queries.GetReservationsByUserIDKeyset(ctx, r.db, params)
-	if err != nil {
-		return nil, infra.WrapRepoErr("failed to find reservations by user ID with keyset", err)
-	}
-
-	result := make([]*queries.ReservationListItem, len(rows))
-	for i, row := range rows {
-		result[i] = toReservationListItemFromUserKeysetRow(row)
-	}
-
-	return result, nil
 }
 
 func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {

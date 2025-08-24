@@ -110,9 +110,16 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 		return
 	}
 
-	response := resdto.FromReservationView(result.Reservation)
+	reservationView, err := h.reservationQueries.GetByID(c, result.ReservationID, userID)
+	if err != nil {
+		httperr.AbortWithError(c, http.StatusInternalServerError, err,
+			"Failed to retrieve created reservation", "RESERVATION_QUERY_FAILED")
+		return
+	}
 
-	c.Header("Location", "/reservations/"+result.Reservation.ID.String())
+	response := resdto.FromReservationView(reservationView)
+
+	c.Header("Location", "/reservations/"+result.ReservationID.String())
 	if result.IsReplayed {
 		c.Header("Idempotent-Replayed", "true")
 		c.JSON(http.StatusOK, response)
@@ -142,9 +149,16 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 		return
 	}
 
-	// actor is the current user (authorization can be applied inside queries)
-	actorID, _ := middleware.GetUserID(c)
-	reservationRM, err := h.reservationQueries.GetByID(c.Request.Context(), actorID, id)
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		slog.Error("Failed to get user ID from context")
+		httperr.AbortWithError(c, http.StatusInternalServerError,
+			ErrMissingUserContext,
+			"Internal server error", nil)
+		return
+	}
+
+	reservationRM, err := h.reservationQueries.GetByID(c.Request.Context(), userID, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, queries.ErrReservationNotFound):

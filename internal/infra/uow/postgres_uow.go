@@ -43,10 +43,12 @@ func NewPostgresUoW(pool *pgxpool.Pool, q *sqlc.Queries) shared.UnitOfWork {
 	}
 }
 
+// ReadCommitted prevents dirty reads while allowing concurrent writes
 func (u *PostgresUoW) Within(ctx context.Context, fn func(ctx context.Context, tx shared.Tx) error) error {
 	return u.runInTxWithOptions(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted}, fn)
 }
 
+// Read-only transaction for consistent multi-table snapshots
 func (u *PostgresUoW) WithinReadOnly(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error {
 	return u.runReadOnlyTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}, fn)
 }
@@ -55,7 +57,7 @@ func (u *PostgresUoW) WithDB(ctx context.Context, fn func(ctx context.Context, d
 	return fn(ctx, u.pool)
 }
 
-// runInTxWithOptions handles transaction with retry logic and repository initialization
+// Avoids defer accumulation in retry loops to prevent connection leaks
 func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOptions, fn func(ctx context.Context, tx shared.Tx) error) error {
 	const maxRetries = 3
 	base := 100 * time.Millisecond
@@ -66,17 +68,6 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 			return errs.Mark(err, errTransactionBegin)
 		}
 
-		var commit bool
-		defer func() {
-			if !commit {
-				if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
-					if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-						slog.Warn("failed to rollback transaction", "error", rollbackErr)
-					}
-				}
-			}
-		}()
-
 		tx := &pgTx{
 			dbtx: pgxTx,
 			uow:  u,
@@ -85,10 +76,15 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 		err = fn(ctx, tx)
 		if err == nil {
 			if err = pgxTx.Commit(ctx); err == nil {
-				commit = true
 				return nil
 			}
 			err = errs.Mark(err, errTransactionCommit)
+		}
+
+		if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
+			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
+				slog.Warn("rollback failed", "attempt", attempt+1, "error", rollbackErr)
+			}
 		}
 
 		if !isRetryableError(err) || attempt == maxRetries {
@@ -101,13 +97,14 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 			return err
 		}
 
+		// Jitter prevents thundering herd
 		waitTime := time.Duration(1<<attempt) * base
 		jitter := time.Duration(rand.Int63n(int64(waitTime / 5)))
 		waitTime += jitter
 
 		slog.Warn("retrying transaction due to retryable error",
 			"attempt", attempt+1,
-			"wait_time", waitTime,
+			"wait_ms", waitTime.Milliseconds(),
 			"error", err)
 
 		select {

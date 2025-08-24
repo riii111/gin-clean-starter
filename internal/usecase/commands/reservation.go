@@ -14,11 +14,9 @@ import (
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/pkg/clock"
 	"gin-clean-starter/internal/pkg/errs"
-	"gin-clean-starter/internal/usecase/queries"
 	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
-	"github.com/jinzhu/copier"
 )
 
 var (
@@ -38,8 +36,8 @@ var (
 )
 
 type CreateReservationResult struct {
-	Reservation *queries.ReservationView
-	IsReplayed  bool
+	ReservationID uuid.UUID
+	IsReplayed    bool
 }
 
 type ValidationResult struct {
@@ -83,25 +81,25 @@ func (r *reservationUseCaseImpl) CreateReservation(
 	var result *CreateReservationResult
 
 	err := r.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
-		existingResult, err := r.handleIdempotencyInTx(ctx, tx, idempotencyKey, userID, requestHash, expiresAt)
+		existingReservationID, err := r.handleIdempotencyInTx(ctx, tx, idempotencyKey, userID, requestHash, expiresAt)
 		if err != nil {
 			return err
 		}
-		if existingResult != nil {
+		if existingReservationID != nil {
 			result = &CreateReservationResult{
-				Reservation: existingResult,
-				IsReplayed:  true,
+				ReservationID: *existingReservationID,
+				IsReplayed:    true,
 			}
 			return nil
 		}
 
-		reservationView, err := r.createNewReservationInTx(ctx, tx, req, userID, idempotencyKey)
+		reservationID, err := r.createNewReservationInTx(ctx, tx, req, userID, idempotencyKey)
 		if err != nil {
 			return err
 		}
 		result = &CreateReservationResult{
-			Reservation: reservationView,
-			IsReplayed:  false,
+			ReservationID: *reservationID,
+			IsReplayed:    false,
 		}
 		return nil
 	})
@@ -118,7 +116,7 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	idempotencyKey, userID uuid.UUID,
 	requestHash string,
 	expiresAt time.Time,
-) (*queries.ReservationView, error) {
+) (*uuid.UUID, error) {
 	if err := tx.Idempotency().TryInsert(ctx, tx.DB(), idempotencyKey, userID, "POST /reservations", requestHash, expiresAt); err != nil {
 		return nil, errs.Mark(err, ErrIdempotencyCheckFailed)
 	}
@@ -131,15 +129,7 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	switch existing.Status {
 	case "completed":
 		if existing.ResultReservationID != nil {
-			reservation, err := tx.Reads().ReservationByID(ctx, *existing.ResultReservationID)
-			if err != nil {
-				return nil, errs.Mark(err, ErrDatabaseOperationFailed)
-			}
-			var reservationView queries.ReservationView
-			if err := copier.Copy(&reservationView, reservation); err != nil {
-				return nil, errs.Mark(err, ErrDatabaseOperationFailed)
-			}
-			return &reservationView, nil
+			return existing.ResultReservationID, nil
 		}
 		return nil, ErrMissingResultReservationID
 
@@ -159,7 +149,7 @@ func (r *reservationUseCaseImpl) createNewReservationInTx(
 	tx shared.Tx,
 	req reqdto.CreateReservationRequest,
 	userID, idempotencyKey uuid.UUID,
-) (*queries.ReservationView, error) {
+) (*uuid.UUID, error) {
 	validationResult, err := r.validateInputsInTx(ctx, tx, req)
 	if err != nil {
 		return nil, err
@@ -194,17 +184,7 @@ func (r *reservationUseCaseImpl) createNewReservationInTx(
 		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
 	}
 
-	reservation, err := tx.Reads().ReservationByID(ctx, reservationID)
-	if err != nil {
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
-	}
-
-	var reservationView queries.ReservationView
-	if err := copier.Copy(&reservationView, reservation); err != nil {
-		return nil, errs.Mark(err, ErrDatabaseOperationFailed)
-	}
-
-	return &reservationView, nil
+	return &reservationID, nil
 }
 
 func (r *reservationUseCaseImpl) validateInputsInTx(
