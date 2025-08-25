@@ -83,13 +83,13 @@ func (a *authCommandsImpl) Login(ctx context.Context, req reqdto.LoginRequest) (
 	err = a.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		updateErr := tx.Users().UpdateLastLogin(ctx, tx.DB(), userReadModel.ID)
 		if updateErr != nil {
-			slog.Warn("failed to update last login", "user_id", userReadModel.ID, "error", updateErr)
+			slog.Warn("failed to update last login", "user_id", userReadModel.ID, "error", updateErr.Error())
 			// Continue without failing - this is not critical
 		}
 		return nil
 	})
 	if err != nil {
-		slog.Warn("transaction failed during login", "user_id", userReadModel.ID, "error", err)
+		slog.Warn("transaction failed during login", "user_id", userReadModel.ID, "error", err.Error())
 		// Continue without failing - login was successful, only last_login update failed
 	}
 
@@ -123,9 +123,6 @@ func (a *authCommandsImpl) RefreshToken(ctx context.Context, refreshToken string
 	// Validate user still exists and is active
 	userReadModel, err := a.readStore.FindByID(ctx, claims.UserID)
 	if err != nil || userReadModel == nil {
-		if err != nil {
-			return nil, errs.Mark(err, ErrUserNotFound)
-		}
 		return nil, ErrUserNotFound
 	}
 
@@ -153,16 +150,20 @@ func (a *authCommandsImpl) validateUser(ctx context.Context, credentials user.Cr
 	userReadModel, hashedPassword, err := a.readStore.FindByEmail(ctx, credentials.Email().Value())
 	if err != nil {
 		// Return same error as password mismatch to prevent user enumeration attacks
-		return nil, errs.Mark(err, ErrInvalidCredentials)
+		return nil, ErrInvalidCredentials
 	}
 
-	if userReadModel == nil || !userReadModel.IsActive {
+	if userReadModel == nil {
+		return nil, ErrUserNotFound
+	}
+
+	if !userReadModel.IsActive {
 		return nil, ErrUserInactive
 	}
 
 	err = password.ComparePassword(hashedPassword, credentials.Password().Value())
 	if err != nil {
-		return nil, errs.Mark(err, ErrInvalidCredentials)
+		return nil, ErrInvalidCredentials
 	}
 
 	return userReadModel, nil

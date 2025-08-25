@@ -12,7 +12,6 @@ import (
 	"gin-clean-starter/internal/pkg/config"
 	"gin-clean-starter/internal/pkg/cookie"
 	"gin-clean-starter/internal/pkg/jwt"
-	"gin-clean-starter/internal/usecase"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
 
@@ -134,11 +133,11 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), userID)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrUserNotFound):
+		case errors.Is(err, queries.ErrUserNotFound):
 			slog.Warn("User not found", "user_id", userID, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"User not found", nil)
-		case errors.Is(err, usecase.ErrUserInactive):
+		case errors.Is(err, queries.ErrUserInactive):
 			slog.Warn("User account is inactive", "user_id", userID, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)

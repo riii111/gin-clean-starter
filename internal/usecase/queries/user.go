@@ -39,7 +39,7 @@ func (q *userQueriesImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 	user, err := q.readStore.FindByID(ctx, userID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, errs.Mark(err, ErrUserNotFound)
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (q *userQueriesImpl) GetUserByID(ctx context.Context, actorID uuid.UUID, ac
 	user, err := q.readStore.FindByID(ctx, targetID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, errs.Mark(err, ErrUserNotFound)
+			return nil, ErrUserNotFound
 		}
 		return nil, err
 	}
