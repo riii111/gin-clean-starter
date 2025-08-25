@@ -97,7 +97,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	cookie.ClearTokenCookies(c, h.cfg.Cookie)
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusNoContent, nil)
 }
 
 // @Summary Get current user

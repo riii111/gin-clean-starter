@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -56,6 +57,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 
 		userID, role, err := m.authUseCase.ValidateToken(token)
 		if err != nil {
+			slog.Warn("Token validation failed in auth middleware", "error", err.Error())
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Invalid or expired token",
 			})
