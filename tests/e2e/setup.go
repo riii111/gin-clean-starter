@@ -45,7 +45,7 @@ type ContainerInfo struct {
 }
 
 // ------------------------------------------------------------
-// 各テストプロセス用にセットアップ
+// E2E Environment Setup
 // ------------------------------------------------------------
 func setupE2EEnvironment(t *testing.T) (*pgxpool.Pool, *gin.Engine, config.Config) {
 	postgresInfo := startContainers(t)
@@ -53,18 +53,18 @@ func setupE2EEnvironment(t *testing.T) (*pgxpool.Pool, *gin.Engine, config.Confi
 	pool, dbConfig := prepareDatabase(t, postgresInfo)
 
 	router, cfg, app := buildE2EApp(pool, dbConfig)
-	require.NotNil(t, router, "Routerのセットアップに失敗")
+	require.NotNil(t, router, "Failed to setup router")
 
 	// Register cleanup for the fx app
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := app.Stop(ctx); err != nil {
-			slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
+			slog.Warn("Failed to stop fx application", "error", err.Error())
 		}
 	})
 
-	slog.Info("E2E環境の準備が完了しました",
+	slog.Info("E2E environment ready",
 		"postgres_host", postgresInfo.Host,
 		"postgres_port", postgresInfo.Port.Port())
 
@@ -72,24 +72,24 @@ func setupE2EEnvironment(t *testing.T) (*pgxpool.Pool, *gin.Engine, config.Confi
 }
 
 // ------------------------------------------------------------
-// コンテナ起動関数
+// Container Startup
 // ------------------------------------------------------------
 func startContainers(t *testing.T) ContainerInfo {
 	gin.SetMode(gin.TestMode)
 	startPostgreSQLContainerOnce(t)
 
 	postgresInfo, err := getContainerHostPort(postgresTestContainer, "5432/tcp")
-	require.NoError(t, err, "PostgreSQLコンテナ情報の取得に失敗")
+	require.NoError(t, err, "Failed to get PostgreSQL container info")
 
 	return postgresInfo
 }
 
 // ------------------------------------------------------------
-// データベース準備関数
+// Database Preparation
 // ------------------------------------------------------------
 func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, config.DBConfig) {
-	// プロセス毎に違うスキーマ名を生成
-	dbName := "testdb_" + strings.ReplaceAll(uuid.New().String(), "-", "") // ハイフンを除去してDB名として使用
+	// Generate unique schema name per process
+	dbName := "testdb_" + strings.ReplaceAll(uuid.New().String(), "-", "")
 
 	adminDSN := fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable",
 		testUser, testPassword, postgresInfo.Host, postgresInfo.Port.Port())
@@ -98,15 +98,15 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 	defer cancel()
 
 	adminPool, err := pgxpool.New(ctx, adminDSN)
-	require.NoError(t, err, "管理者接続に失敗")
+	require.NoError(t, err, "Failed to connect as admin")
 	defer adminPool.Close()
 
-	// データベース作成をリトライ機構付きで実行
+	// Create database with retry mechanism
 	var createErr error
 	for attempts := range 5 {
 		var waitTime time.Duration
 		if attempts > 0 {
-			// 指数バックオフ
+			// Exponential backoff
 			waitTime = time.Duration(500+attempts*500) * time.Millisecond
 			waitTime = min(waitTime, 3*time.Second)
 			time.Sleep(waitTime)
@@ -116,28 +116,28 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 			break
 		}
 		if attempts > 0 {
-			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr.Error(), "retry_wait", waitTime)
+			slog.Warn("Retrying database creation", "attempt", attempts+1, "error", createErr.Error(), "retry_wait", waitTime)
 		} else {
-			slog.Warn("データベース作成を再試行中", "attempt", attempts+1, "error", createErr.Error())
+			slog.Warn("Retrying database creation", "attempt", attempts+1, "error", createErr.Error())
 		}
 	}
-	require.NoError(t, createErr, "テスト用データベースの作成に失敗")
+	require.NoError(t, createErr, "Failed to create test database")
 
-	// クリーンアップ（コンテナ自体は自動で消えるが、異常終了時も考慮）
+	// Cleanup (container auto-removes, but handle abnormal exits)
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cleanupCancel()
 
 		cleanupPool, err := pgxpool.New(cleanupCtx, adminDSN)
 		if err != nil {
-			slog.Warn("クリーンアップ用のデータベース接続に失敗しました", "database", dbName, "error", err.Error())
+			slog.Warn("Failed to connect for cleanup", "database", dbName, "error", err.Error())
 			return
 		}
 		defer cleanupPool.Close()
 
 		_, err = cleanupPool.Exec(cleanupCtx, "DROP DATABASE IF EXISTS "+dbName)
 		if err != nil {
-			slog.Warn("テストデータベースの削除に失敗しました", "database", dbName, "error", err.Error())
+			slog.Warn("Failed to drop test database", "database", dbName, "error", err.Error())
 		}
 	})
 
@@ -152,18 +152,18 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 	}
 
 	pool, _, err := db.Connect(dbConfig)
-	require.NoError(t, err, "データベース接続に失敗")
-	require.NotNil(t, pool, "データベース接続が nil です")
+	require.NoError(t, err, "Failed to connect to database")
+	require.NotNil(t, pool, "Database connection is nil")
 
 	err = applyMigrations(t, dbConfig)
-	require.NoError(t, err, "データベースマイグレーションに失敗")
+	require.NoError(t, err, "Failed to apply database migrations")
 
 	if err := dbtest.SeedReferenceData(pool); err != nil {
-		require.NoError(t, err, "参照データの投入に失敗")
+		require.NoError(t, err, "Failed to seed reference data")
 	}
 
 	if gin.Mode() != gin.TestMode {
-		slog.Info("データベースの準備が完了しました", "postgres_schema", dbName)
+		slog.Info("Database setup complete", "postgres_schema", dbName)
 	}
 	return pool, dbConfig
 }
@@ -211,14 +211,14 @@ func applyMigrations(t *testing.T, dbConfig config.DBConfig) error {
 			return fmt.Errorf("failed to execute migration %s: %w", file, err)
 		}
 
-		slog.Info("マイグレーション実行完了", "file", file)
+		slog.Info("Migration completed", "file", file)
 	}
 
 	return nil
 }
 
 // ------------------------------------------------------------
-// E2Eテスト用アプリケーション構築関数
+// E2E Application Builder
 // Returns router, config, and fx.App for proper lifecycle management
 // ------------------------------------------------------------
 func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, config.Config, *fx.App) {
@@ -247,7 +247,7 @@ func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, con
 
 		fx.Populate(&router, &cfg),
 
-		// ログを無効にして起動
+		// Start with logging disabled
 		fx.NopLogger,
 	)
 
@@ -259,7 +259,7 @@ func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, con
 	}
 
 	if router == nil {
-		panic("fxアプリケーションの起動に失敗しました")
+		panic("Failed to start fx application")
 	}
 
 	return router, cfg, app
@@ -272,7 +272,7 @@ func createTestConfig(dbConfig config.DBConfig) config.Config {
 }
 
 // ------------------------------------------------------------
-// コンテナ起動の共通関数
+// Generic Container Startup
 // ------------------------------------------------------------
 func startGenericContainer(req testcontainers.ContainerRequest, timeoutSec int) (testcontainers.Container, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
@@ -286,12 +286,12 @@ func startGenericContainer(req testcontainers.ContainerRequest, timeoutSec int) 
 }
 
 // ------------------------------------------------------------
-// PostgreSQLコンテナを一度だけ起動／再利用
+// Start PostgreSQL Container Once
 // ------------------------------------------------------------
 func startPostgreSQLContainerOnce(t *testing.T) {
 	postgresContainerOnce.Do(func() {
 		// testcontainers Docker-in-Docker configuration
-		// Note: RYUK is enabled for proper cleanup in local development
+		// Note: RYUK enabled for proper cleanup
 
 		req := testcontainers.ContainerRequest{
 			Image:        "postgres:17",
@@ -302,24 +302,24 @@ func startPostgreSQLContainerOnce(t *testing.T) {
 				"POSTGRES_DB":       "postgres",
 			},
 			Tmpfs: map[string]string{
-				"/var/lib/postgresql/data": "rw,size=512m", // PostgreSQLデータをRAMに載せてI/O削減
+				"/var/lib/postgresql/data": "rw,size=512m", // PostgreSQL data in RAM for I/O reduction
 			},
 			Cmd: []string{
 				"postgres",
-				"-c", "fsync=off", // 耐久性よりパフォーマンスを優先
-				"-c", "full_page_writes=off", // フルページ書き込み無効
-				"-c", "synchronous_commit=off", // 同期コミット無効
-				"-c", "max_wal_size=512MB", // WALファイルサイズ上限
-				"-c", "checkpoint_completion_target=0.9", // チェックポイント完了目標時間
-				"-c", "wal_buffers=16MB", // WALバッファ増量
-				"-c", "shared_buffers=256MB", // 共有バッファ増量
-				"-c", "max_connections=200", // 最大接続数
-				"-c", "log_statement=none", // ログ無効化
-				"-c", "log_duration=off", // 実行時間ログ無効
-				"-c", "log_lock_waits=off", // ロック待ちログ無効
-				"-c", "log_checkpoints=off", // チェックポイントログ無効
-				"-c", "autovacuum=on", // オートバキューム有効
-				"-c", "autovacuum_max_workers=2", // バキュームワーカー削減
+				"-c", "fsync=off", // Performance over durability
+				"-c", "full_page_writes=off", // Disable full page writes
+				"-c", "synchronous_commit=off", // Disable sync commit
+				"-c", "max_wal_size=512MB", // WAL file size limit
+				"-c", "checkpoint_completion_target=0.9", // Checkpoint completion target
+				"-c", "wal_buffers=16MB", // WAL buffer size
+				"-c", "shared_buffers=256MB", // Shared buffer size
+				"-c", "max_connections=200", // Max connections
+				"-c", "log_statement=none", // Disable statement logging
+				"-c", "log_duration=off", // Disable duration logging
+				"-c", "log_lock_waits=off", // Disable lock wait logging
+				"-c", "log_checkpoints=off", // Disable checkpoint logging
+				"-c", "autovacuum=on", // Enable autovacuum
+				"-c", "autovacuum_max_workers=2", // Reduce vacuum workers
 			},
 			WaitingFor: wait.ForSQL("5432/tcp", "pgx", func(host string, port nat.Port) string {
 				return fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable",
@@ -330,15 +330,15 @@ func startPostgreSQLContainerOnce(t *testing.T) {
 
 		var err error
 		postgresTestContainer, err = startGenericContainer(req, 180)
-		require.NoError(t, err, "PostgreSQLコンテナの起動に失敗")
+		require.NoError(t, err, "Failed to start PostgreSQL container")
 
-		// コンテナの手動クリーンアップを登録 (RYUK無効時用)
+		// Register manual cleanup (for RYUK disabled)
 		t.Cleanup(func() {
 			if postgresTestContainer != nil {
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
 				if err := postgresTestContainer.Terminate(ctx); err != nil {
-					slog.Warn("PostgreSQLコンテナの終了に失敗しました", "error", err.Error())
+					slog.Warn("Failed to terminate PostgreSQL container", "error", err.Error())
 				}
 			}
 		})
@@ -346,7 +346,7 @@ func startPostgreSQLContainerOnce(t *testing.T) {
 }
 
 // ------------------------------------------------------------
-// コンテナ関連の共通ユーティリティ関数
+// Container Utility Functions
 // ------------------------------------------------------------
 func getContainerHostPort(c testcontainers.Container, port string) (ContainerInfo, error) {
 	ctx := context.Background()
@@ -362,12 +362,12 @@ func getContainerHostPort(c testcontainers.Container, port string) (ContainerInf
 }
 
 // ------------------------------------------------------------
-// E2Eテストスイートで共通のセットアップ
+// Shared E2E Test Suite Setup
 // ------------------------------------------------------------
 type SharedSuite struct {
 	suite.Suite
 	Router *gin.Engine
-	DB     *pgxpool.Pool // 各テストで使う DB 接続
+	DB     *pgxpool.Pool // DB connection for each test
 	Config config.Config
 }
 
@@ -376,9 +376,9 @@ func (s *SharedSuite) SetupSharedSuite(t *testing.T) {
 	s.DB = db
 	s.Router = router
 	s.Config = cfg
-	require.NotNil(t, db, "DBのセットアップに失敗")
-	require.NotEmpty(t, s.Config, "Configの取得に失敗")
-	require.NotNil(t, s.Router, "Routerのセットアップに失敗")
+	require.NotNil(t, db, "Failed to setup DB")
+	require.NotEmpty(t, s.Config, "Failed to get Config")
+	require.NotNil(t, s.Router, "Failed to setup Router")
 }
 
 func (s *SharedSuite) SetupSuite() {
