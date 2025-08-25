@@ -52,10 +52,6 @@ func (q *userQueriesImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 }
 
 func (q *userQueriesImpl) GetUserByID(ctx context.Context, actorID uuid.UUID, actorRole string, targetID uuid.UUID) (*AuthorizedUserView, error) {
-	if !canAccessUser(actorID, actorRole, targetID) {
-		return nil, ErrUserAccess
-	}
-
 	user, err := q.readStore.FindByID(ctx, targetID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
@@ -64,15 +60,14 @@ func (q *userQueriesImpl) GetUserByID(ctx context.Context, actorID uuid.UUID, ac
 		return nil, err
 	}
 
-	if !user.IsActive && actorRole != RoleAdmin {
-		// Only admins can see inactive users
-		return nil, ErrUserNotFound
+	if !canAccessUser(actorID, actorRole, targetID, user.IsActive) {
+		return nil, ErrUserAccess
 	}
 
 	return user, nil
 }
 
-func canAccessUser(actorID uuid.UUID, actorRole string, targetID uuid.UUID) bool {
+func canAccessUser(actorID uuid.UUID, actorRole string, targetID uuid.UUID, userIsActive bool) bool {
 	if actorID == targetID {
 		return true
 	}
@@ -83,7 +78,7 @@ func canAccessUser(actorID uuid.UUID, actorRole string, targetID uuid.UUID) bool
 
 	// TODO: Implement company-based access control for operators
 	if actorRole == RoleOperator {
-		return true
+		return userIsActive // Operators can only access active users
 	}
 
 	return false
