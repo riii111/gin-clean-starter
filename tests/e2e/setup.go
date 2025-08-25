@@ -52,7 +52,7 @@ func setupE2EEnvironment(t *testing.T) (*pgxpool.Pool, *gin.Engine, config.Confi
 
 	pool, dbConfig := prepareDatabase(t, postgresInfo)
 
-	router, cfg, app := buildE2EAppWithLifecycle(pool, dbConfig)
+	router, cfg, app := buildE2EApp(pool, dbConfig)
 	require.NotNil(t, router, "Routerのセットアップに失敗")
 
 	// Register cleanup for the fx app
@@ -221,7 +221,7 @@ func applyMigrations(t *testing.T, dbConfig config.DBConfig) error {
 // E2Eテスト用アプリケーション構築関数
 // Returns router, config, and fx.App for proper lifecycle management
 // ------------------------------------------------------------
-func buildE2EAppWithLifecycle(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, config.Config, *fx.App) {
+func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, config.Config, *fx.App) {
 	var router *gin.Engine
 	var cfg config.Config
 
