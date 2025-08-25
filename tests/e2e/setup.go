@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,12 +17,11 @@ import (
 	"gin-clean-starter/cmd/bootstrap/components"
 	"gin-clean-starter/internal/infra/db"
 	"gin-clean-starter/internal/pkg/config"
+	"gin-clean-starter/tests/common/dbtest"
 
 	"github.com/docker/go-connections/nat"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -31,7 +29,6 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"go.uber.org/fx"
-	"go.uber.org/fx/fxevent"
 )
 
 var (
@@ -41,46 +38,6 @@ var (
 	testUser     = "test"
 	testPassword = "testpass"
 )
-
-type TxPool struct {
-	tx pgx.Tx
-}
-
-func NewTxPool(tx pgx.Tx) *TxPool {
-	return &TxPool{tx: tx}
-}
-
-func (tp *TxPool) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	return tp.tx.Exec(ctx, sql, args...)
-}
-
-func (tp *TxPool) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	return tp.tx.Query(ctx, sql, args...)
-}
-
-func (tp *TxPool) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return tp.tx.QueryRow(ctx, sql, args...)
-}
-
-func (tp *TxPool) Begin(ctx context.Context) (pgx.Tx, error) {
-	return tp.tx, nil // Return the same transaction
-}
-
-func (tp *TxPool) Close() {
-	// No-op for transactions
-}
-
-func (tp *TxPool) Ping(ctx context.Context) error {
-	return nil // Always healthy for transactions
-}
-
-func (tp *TxPool) Config() *pgxpool.Config {
-	return nil // Not applicable for transactions
-}
-
-func (tp *TxPool) Stat() *pgxpool.Stat {
-	return nil // Not applicable for transactions
-}
 
 type ContainerInfo struct {
 	Host string
@@ -95,8 +52,17 @@ func setupE2EEnvironment(t *testing.T) (*pgxpool.Pool, *gin.Engine, config.Confi
 
 	pool, dbConfig := prepareDatabase(t, postgresInfo)
 
-	router, cfg := buildE2EApp(pool, dbConfig)
+	router, cfg, app := buildE2EAppWithLifecycle(pool, dbConfig)
 	require.NotNil(t, router, "Routerのセットアップに失敗")
+
+	// Register cleanup for the fx app
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := app.Stop(ctx); err != nil {
+			slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
+		}
+	})
 
 	slog.Info("E2E環境の準備が完了しました",
 		"postgres_host", postgresInfo.Host,
@@ -192,7 +158,7 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 	err = applyMigrations(t, dbConfig)
 	require.NoError(t, err, "データベースマイグレーションに失敗")
 
-	if err := seedReferenceData(pool); err != nil {
+	if err := dbtest.SeedReferenceData(pool); err != nil {
 		require.NoError(t, err, "参照データの投入に失敗")
 	}
 
@@ -202,28 +168,11 @@ func prepareDatabase(t *testing.T, postgresInfo ContainerInfo) (*pgxpool.Pool, c
 	return pool, dbConfig
 }
 
-func seedReferenceData(pool *pgxpool.Pool) error {
-	ctx := context.Background()
-
-	// 初期データの投入
-	_, err := pool.Exec(ctx, `
-		INSERT INTO companies (id, name) VALUES 
-		    (gen_random_uuid(), 'Default Company'),
-		    (gen_random_uuid(), 'Test Company')
-		ON CONFLICT (name) DO NOTHING;
-	`)
-	if err != nil {
-		return err
-	}
-
-	// ユーザーは各テストで作成するため、ここでは投入しない
-	return nil
-}
-
 func applyMigrations(t *testing.T, dbConfig config.DBConfig) error {
 	t.Helper()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
 	pool, _, err := db.Connect(dbConfig)
 	if err != nil {
 		return fmt.Errorf("failed to connect to database: %w", err)
@@ -270,8 +219,9 @@ func applyMigrations(t *testing.T, dbConfig config.DBConfig) error {
 
 // ------------------------------------------------------------
 // E2Eテスト用アプリケーション構築関数
+// Returns router, config, and fx.App for proper lifecycle management
 // ------------------------------------------------------------
-func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, config.Config) {
+func buildE2EAppWithLifecycle(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, config.Config, *fx.App) {
 	var router *gin.Engine
 	var cfg config.Config
 
@@ -307,17 +257,12 @@ func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, con
 	if err := app.Start(ctx); err != nil {
 		panic(fmt.Sprintf("Failed to start fx app: %v", err))
 	}
-	defer func() {
-		if err := app.Stop(ctx); err != nil {
-			slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
-		}
-	}()
 
 	if router == nil {
 		panic("fxアプリケーションの起動に失敗しました")
 	}
 
-	return router, cfg
+	return router, cfg, app
 }
 
 func createTestConfig(dbConfig config.DBConfig) config.Config {
@@ -422,49 +367,19 @@ func getContainerHostPort(c testcontainers.Container, port string) (ContainerInf
 // ------------------------------------------------------------
 type SharedSuite struct {
 	suite.Suite
-	Router   *gin.Engine
-	DB       *TxPool // 各テストで使うトランザクションラッパー
-	Config   config.Config
-	baseDB   *pgxpool.Pool // Tx作成元のDB接続
-	baseTx   pgx.Tx        // ベーストランザクション
-	app      *fx.App
-	baseOpts fx.Option
-}
-
-func (s *SharedSuite) GetBaseDB() *pgxpool.Pool {
-	return s.baseDB
+	Router *gin.Engine
+	DB     *pgxpool.Pool // 各テストで使う DB 接続
+	Config config.Config
 }
 
 func (s *SharedSuite) SetupSharedSuite(t *testing.T) {
-	baseDB, router, cfg := setupE2EEnvironment(t)
-	s.baseDB = baseDB
+	db, router, cfg := setupE2EEnvironment(t)
+	s.DB = db
 	s.Router = router
 	s.Config = cfg
-	require.NotNil(t, baseDB, "DBのセットアップに失敗")
+	require.NotNil(t, db, "DBのセットアップに失敗")
 	require.NotEmpty(t, s.Config, "Configの取得に失敗")
 	require.NotNil(t, s.Router, "Routerのセットアップに失敗")
-
-	ctx := context.Background()
-	baseTx, err := s.baseDB.Begin(ctx)
-	require.NoError(t, err)
-	s.baseTx = baseTx
-
-	t.Cleanup(func() {
-		_ = s.baseTx.Rollback(context.Background())
-	})
-
-	configProvider := func() config.Config { return s.Config }
-
-	s.baseOpts = fx.Options(
-		bootstrap.LoggerModule,
-		bootstrap.JWTModule,
-		components.RepositoryModule,
-		components.UseCaseModule,
-		components.HandlerModule,
-		fx.Module("testConfig",
-			fx.Provide(configProvider),
-		),
-	)
 }
 
 func (s *SharedSuite) SetupSuite() {
@@ -472,52 +387,12 @@ func (s *SharedSuite) SetupSuite() {
 }
 
 func (s *SharedSuite) SetupTest() {
-	s.DB = NewTxPool(s.baseTx)
-
-	var router *gin.Engine
-	testApp := fx.New(
-		fx.WithLogger(func() fxevent.Logger { return fxevent.NopLogger }),
-		s.baseOpts,
-		fx.Provide(func() *gin.Engine { return gin.New() }),
-		fx.Provide(func() *pgxpool.Pool { return s.baseDB }),
-		fx.Decorate(func(*pgxpool.Pool) *pgxpool.Pool {
-			// 実際のTxPoolの実装は複雑なため、基本DBプールを使用
-			// 理想的にはsqlc.DBTXラッパーを実装すべき
-			return s.baseDB
-		}),
-		fx.Populate(&router),
-	)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	require.NoError(s.T(), testApp.Start(ctx))
-	s.Router = router
-	s.app = testApp
-
-	s.T().Cleanup(func() {
-		if s.app != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if err := s.app.Stop(ctx); err != nil {
-				slog.Warn("fxアプリケーションの停止に失敗しました", "error", err.Error())
-			}
-			s.app = nil
-		}
-	})
+	// No additional setup needed for tests
+	// Each test method can reset DB state if needed
 }
 
-var spSeq uint64
-
 func (s *SharedSuite) SetupSubTest() {
-	sp := fmt.Sprintf("sp_%d", atomic.AddUint64(&spSeq, 1))
-	ctx := context.Background()
-
-	_, err := s.baseTx.Exec(ctx, "SAVEPOINT "+sp)
-	require.NoError(s.T(), err)
-
-	s.T().Cleanup(func() {
-		_, _ = s.baseTx.Exec(context.Background(), "ROLLBACK TO SAVEPOINT "+sp)
-		_, _ = s.baseTx.Exec(context.Background(), "RELEASE SAVEPOINT "+sp)
-	})
+	// Reset database state using TRUNCATE + reseed approach
+	err := dbtest.ResetDB(s.DB)
+	require.NoError(s.T(), err, "Failed to reset database state")
 }

@@ -17,7 +17,8 @@ import (
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
 	"gin-clean-starter/tests/common/builder"
-	"gin-clean-starter/tests/common/helper"
+	"gin-clean-starter/tests/common/httptest"
+	"gin-clean-starter/tests/common/testutil"
 	commandsmock "gin-clean-starter/tests/mock/commands"
 	queriesmock "gin-clean-starter/tests/mock/queries"
 
@@ -89,29 +90,29 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 			}, nil).Times(1)
 		s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), returnUser.ID).
 			Return(returnUser, nil).Times(1)
-		rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
+		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 
 		var response resdto.LoginResponse
-		helper.AssertSuccessResponse(s.T(), rec, http.StatusOK, &response)
+		httptest.AssertSuccessResponse(s.T(), rec, http.StatusOK, &response)
 		s.Equal(returnUser.Email, response.User.Email)
 	})
 
 	s.Run("異常系: バリデーションエラーで400 BadRequestが返される", func() {
 		bound := []testCaseAuth{
-			{name: "Email境界値OK(有効なメール)", mutate: helper.Field("email", "valid@example.com"), expectCode: http.StatusOK},
-			{name: "Email境界値NG(無効なメール)", mutate: helper.Field("email", "invalid-email"), expectCode: http.StatusBadRequest},
-			{name: "Password境界値OK(8文字)", mutate: helper.Field("password", "password"), expectCode: http.StatusOK},
-			{name: "Password境界値NG(7文字)", mutate: helper.Field("password", strings.Repeat("a", 7)), expectCode: http.StatusBadRequest},
+			{name: "Email境界値OK(有効なメール)", mutate: testutil.Field("email", "valid@example.com"), expectCode: http.StatusOK},
+			{name: "Email境界値NG(無効なメール)", mutate: testutil.Field("email", "invalid-email"), expectCode: http.StatusBadRequest},
+			{name: "Password境界値OK(8文字)", mutate: testutil.Field("password", "password"), expectCode: http.StatusOK},
+			{name: "Password境界値NG(7文字)", mutate: testutil.Field("password", strings.Repeat("a", 7)), expectCode: http.StatusBadRequest},
 		}
 
 		missing := []testCaseAuth{
-			{name: "Emailフィールドなし(必須)", mutate: helper.Field("email", nil), expectCode: http.StatusBadRequest},
-			{name: "Passwordフィールドなし(必須)", mutate: helper.Field("password", nil), expectCode: http.StatusBadRequest},
+			{name: "Emailフィールドなし(必須)", mutate: testutil.Field("email", nil), expectCode: http.StatusBadRequest},
+			{name: "Passwordフィールドなし(必須)", mutate: testutil.Field("password", nil), expectCode: http.StatusBadRequest},
 		}
 
 		empty := []testCaseAuth{
-			{name: "Emailが空", mutate: helper.Field("email", ""), expectCode: http.StatusBadRequest},
-			{name: "Passwordが空", mutate: helper.Field("password", ""), expectCode: http.StatusBadRequest},
+			{name: "Emailが空", mutate: testutil.Field("email", ""), expectCode: http.StatusBadRequest},
+			{name: "Passwordが空", mutate: testutil.Field("password", ""), expectCode: http.StatusBadRequest},
 		}
 
 		allValidationTestCases := [][]testCaseAuth{bound, missing, empty}
@@ -141,11 +142,11 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 						s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), returnUser.ID).
 							Return(returnUser, nil)
 					}
-					rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "")
+					rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "")
 					if tc.expectCode == http.StatusOK {
-						helper.AssertSuccessResponse(s.T(), rec, tc.expectCode, nil)
+						httptest.AssertSuccessResponse(s.T(), rec, tc.expectCode, nil)
 					} else {
-						helper.AssertErrorResponse(s.T(), rec, tc.expectCode, "")
+						httptest.AssertErrorResponse(s.T(), rec, tc.expectCode, "")
 					}
 				})
 			}
@@ -190,8 +191,8 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 				s.mockCommands.EXPECT().Login(gomock.Any(), reqBody).
 					Return(nil, tc.commandsError).Times(1)
 
-				rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
-				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
+				rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
+				httptest.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
 			})
 		}
 	})
@@ -199,7 +200,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 
 func (s *AuthHandlerTestSuite) TestLogout() {
 	s.Run("正常系: 204 No Contentが返却される", func() {
-		rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, "/auth/logout", nil, "bearer-token")
+		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, "/auth/logout", nil, "bearer-token")
 		s.Equal(http.StatusNoContent, rec.Code)
 	})
 }
@@ -212,16 +213,16 @@ func (s *AuthHandlerTestSuite) TestMe() {
 		s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
 			Return(returnUser, nil).Times(1)
 
-		rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
+		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
 
 		var response map[string]any
-		helper.AssertSuccessResponse(s.T(), rec, http.StatusOK, &response)
+		httptest.AssertSuccessResponse(s.T(), rec, http.StatusOK, &response)
 		s.Equal(returnUser.Email, response["email"])
 	})
 
 	s.Run("異常系: 認証なしで500が返却される", func() {
-		rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "")
-		helper.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal server error")
+		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "")
+		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal server error")
 	})
 
 	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
@@ -256,8 +257,8 @@ func (s *AuthHandlerTestSuite) TestMe() {
 				s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
 					Return(nil, tc.commandsError).Times(1)
 
-				rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
-				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
+				rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
+				httptest.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
 			})
 		}
 	})

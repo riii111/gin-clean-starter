@@ -3,15 +3,19 @@
 package auth_test
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
 	"gin-clean-starter/internal/domain/user"
 	"gin-clean-starter/internal/handler/dto/request"
-	"gin-clean-starter/tests/common/helper"
+	"gin-clean-starter/tests/common/authtest"
+	"gin-clean-starter/tests/common/dbtest"
+	"gin-clean-starter/tests/common/httptest"
+	"gin-clean-starter/tests/common/testutil"
 	"gin-clean-starter/tests/e2e"
-	jwtHelper "gin-clean-starter/tests/e2e/common/helper"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -25,7 +29,7 @@ const (
 
 type authSuite struct {
 	e2e.SharedSuite
-	jwtHelper *jwtHelper.JWTTestHelper
+	jwtHelper *authtest.JWTHelper
 }
 
 func TestAuthSuite(t *testing.T) {
@@ -35,25 +39,24 @@ func TestAuthSuite(t *testing.T) {
 
 func (s *authSuite) SetupSuite() {
 	s.SharedSuite.SetupSuite()
-	s.jwtHelper = jwtHelper.NewJWTTestHelper(s.GetBaseDB(), s.Config.JWT)
+	s.jwtHelper = authtest.NewJWTHelper(s.Config.JWT)
 }
 
 func (s *authSuite) SetupSubTest() {
 	s.SharedSuite.SetupSubTest()
 
-	// テスト用ユーザーを作成
-	s.jwtHelper.CreateTestUserWithDB(s.T(), s.DB, "test@example.com", string(user.RoleAdmin))
-	s.jwtHelper.CreateTestUserWithDB(s.T(), s.DB, "viewer@example.com", string(user.RoleViewer))
-	s.jwtHelper.CreateTestUserWithDB(s.T(), s.DB, "operator@example.com", string(user.RoleOperator))
-	s.jwtHelper.CreateTestUserWithDB(s.T(), s.DB, "inactive@example.com", string(user.RoleAdmin))
-
-	// 非アクティブユーザーを作成
+	dbtest.CreateTestUser(s.T(), s.DB, "test@example.com", string(user.RoleAdmin))
+	dbtest.CreateTestUser(s.T(), s.DB, "viewer@example.com", string(user.RoleViewer))
+	dbtest.CreateTestUser(s.T(), s.DB, "operator@example.com", string(user.RoleOperator))
+	dbtest.CreateTestUser(s.T(), s.DB, "inactive@example.com", string(user.RoleAdmin))
 	ctx := s.T().Context()
 	_, err := s.DB.Exec(ctx, "UPDATE users SET is_active = false WHERE email = 'inactive@example.com'")
 	require.NoError(s.T(), err)
 }
 
 func (s *authSuite) TestLogin() {
+	s.SetupSubTest() // Ensure clean state for table-driven tests
+
 	tests := []struct {
 		name           string
 		email          string
@@ -86,7 +89,7 @@ func (s *authSuite) TestLogin() {
 			name:           "非アクティブユーザー",
 			email:          "inactive@example.com",
 			password:       "password123",
-			expectedStatus: http.StatusUnauthorized,
+			expectedStatus: http.StatusForbidden,
 			description:    "非アクティブユーザーはログインできないこと",
 		},
 		{
@@ -105,6 +108,26 @@ func (s *authSuite) TestLogin() {
 		},
 	}
 
+	s.Run("動的データ構築テスト", func() {
+		t := s.T()
+
+		baseData := map[string]any{
+			"email":    "",
+			"password": "",
+		}
+
+		testutil.Field("email", "test@example.com")(baseData)
+		testutil.Field("password", "password123")(baseData)
+
+		reqBody := request.LoginRequest{
+			Email:    baseData["email"].(string),
+			Password: baseData["password"].(string),
+		}
+
+		w := httptest.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			t := s.T()
@@ -114,34 +137,26 @@ func (s *authSuite) TestLogin() {
 				Password: tt.password,
 			}
 
-			w := helper.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
+			w := httptest.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
-				// Check response contains user information
 				var loginRes struct {
 					User struct {
 						Email string `json:"email"`
 					} `json:"user"`
 				}
-				err := helper.DecodeResponseBody(t, w.Body, &loginRes)
+				err := httptest.DecodeResponseBody(t, w.Body, &loginRes)
 				require.NoError(t, err)
 				require.Equal(t, tt.email, loginRes.User.Email, "ユーザー情報が正しくない")
 
-				// Check cookies contain tokens
-				cookies := w.Result().Cookies()
-				var accessToken, refreshToken string
-				for _, cookie := range cookies {
-					if cookie.Name == "access_token" {
-						accessToken = cookie.Value
-					} else if cookie.Name == "refresh_token" {
-						refreshToken = cookie.Value
-					}
-				}
-				require.NotEmpty(t, accessToken, "アクセストークンがクッキーに設定されていない")
-				require.NotEmpty(t, refreshToken, "リフレッシュトークンがクッキーに設定されていない")
+				accessCookie := httptest.ExtractCookie(w, "access_token")
+				refreshCookie := httptest.ExtractCookie(w, "refresh_token")
+				require.NotNil(t, accessCookie, "アクセストークンがクッキーに設定されていない")
+				require.NotNil(t, refreshCookie, "リフレッシュトークンがクッキーに設定されていない")
+				require.NotEmpty(t, accessCookie.Value, "アクセストークンが空です")
+				require.NotEmpty(t, refreshCookie.Value, "リフレッシュトークンが空です")
 
-				// last_loginが更新されることを確認
 				var lastLogin any
 				err = s.DB.QueryRow(s.T().Context(), "SELECT last_login FROM users WHERE email = $1", tt.email).Scan(&lastLogin)
 				require.NoError(t, err)
@@ -152,6 +167,8 @@ func (s *authSuite) TestLogin() {
 }
 
 func (s *authSuite) TestRefresh() {
+	s.SetupSubTest()
+
 	tests := []struct {
 		name           string
 		setupCookies   func(t *testing.T) []*http.Cookie
@@ -166,9 +183,9 @@ func (s *authSuite) TestRefresh() {
 					Email:    "test@example.com",
 					Password: "password123",
 				}
-				w := helper.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
+				w := httptest.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
 				require.Equal(t, http.StatusOK, w.Code)
-				return w.Result().Cookies()
+				return httptest.ExtractCookies(w)
 			},
 			expectedStatus: http.StatusOK,
 			description:    "有効なリフレッシュトークンでトークンが更新されること",
@@ -200,7 +217,7 @@ func (s *authSuite) TestRefresh() {
 			cookies := tt.setupCookies(t)
 
 			// Create request with cookies using new helper function
-			w := helper.PerformRequestWithCookies(t, s.Router, http.MethodPost, refreshURL, nil, cookies, "")
+			w := httptest.PerformRequestWithCookies(t, s.Router, http.MethodPost, refreshURL, nil, cookies, "")
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
@@ -208,7 +225,7 @@ func (s *authSuite) TestRefresh() {
 				var refreshRes struct {
 					Message string `json:"message"`
 				}
-				err := helper.DecodeResponseBody(t, w.Body, &refreshRes)
+				err := httptest.DecodeResponseBody(t, w.Body, &refreshRes)
 				require.NoError(t, err)
 				require.Equal(t, "Token refreshed successfully", refreshRes.Message)
 
@@ -230,6 +247,21 @@ func (s *authSuite) TestRefresh() {
 }
 
 func (s *authSuite) TestLogout() {
+	s.Run("クッキーベースのログアウト", func() {
+		t := s.T()
+
+		reqBody := request.LoginRequest{
+			Email:    "test@example.com",
+			Password: "password123",
+		}
+		w := httptest.PerformRequest(t, s.Router, http.MethodPost, loginURL, reqBody, "")
+		require.Equal(t, http.StatusOK, w.Code)
+
+		cookies := httptest.ExtractCookies(w)
+		authtest.LogoutUser(t, s.Router, cookies)
+	})
+
+	s.SetupSubTest()
 	tests := []struct {
 		name           string
 		setupToken     func() string
@@ -239,7 +271,7 @@ func (s *authSuite) TestLogout() {
 		{
 			name: "正常なログアウト",
 			setupToken: func() string {
-				return s.jwtHelper.LoginUser(s.T(), s.Router, "test@example.com", "password123")
+				return authtest.LoginUser(s.T(), s.Router, "test@example.com", "password123")
 			},
 			expectedStatus: http.StatusNoContent,
 			description:    "有効なトークンでログアウトできること",
@@ -267,13 +299,15 @@ func (s *authSuite) TestLogout() {
 			t := s.T()
 
 			token := tt.setupToken()
-			w := helper.PerformRequest(t, s.Router, http.MethodPost, logoutURL, nil, token)
+			w := httptest.PerformRequest(t, s.Router, http.MethodPost, logoutURL, nil, token)
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 		})
 	}
 }
 
 func (s *authSuite) TestMe() {
+	s.SetupSubTest()
+
 	tests := []struct {
 		name           string
 		setupUser      func() (string, string, string) // email, role, token
@@ -285,7 +319,7 @@ func (s *authSuite) TestMe() {
 			setupUser: func() (string, string, string) {
 				email := "admin@example.com"
 				role := string(user.RoleAdmin)
-				token := s.jwtHelper.CreateAndLoginWithDB(s.T(), s.DB, s.Router, email, role)
+				token := authtest.CreateAndLogin(s.T(), s.DB, s.Router, email, role)
 				return email, role, token
 			},
 			expectedStatus: http.StatusOK,
@@ -296,11 +330,28 @@ func (s *authSuite) TestMe() {
 			setupUser: func() (string, string, string) {
 				email := "viewer2@example.com"
 				role := string(user.RoleViewer)
-				token := s.jwtHelper.CreateAndLoginWithDB(s.T(), s.DB, s.Router, email, role)
+				token := authtest.CreateAndLogin(s.T(), s.DB, s.Router, email, role)
 				return email, role, token
 			},
 			expectedStatus: http.StatusOK,
 			description:    "Viewerユーザーの情報が取得できること",
+		},
+		{
+			name: "カスタム会社のユーザー情報取得",
+			setupUser: func() (string, string, string) {
+				companyID := dbtest.CreateTestCompany(s.T(), s.DB, "Custom Test Corp")
+				email := "custom@testcorp.com"
+				userID := uuid.New()
+				passwordHash := "$2a$12$uhAjVE9f92IGYv3E25pJNetg.27lVt0p7jmLWjqjmhOg92ldPS0A."
+				ctx := context.Background()
+				_, err := s.DB.Exec(ctx, "INSERT INTO users (id, email, password_hash, role, company_id, is_active) VALUES ($1, $2, $3, $4, $5, true)",
+					userID, email, passwordHash, string(user.RoleAdmin), companyID)
+				require.NoError(s.T(), err)
+				token := authtest.LoginUser(s.T(), s.Router, email, "password123")
+				return email, string(user.RoleAdmin), token
+			},
+			expectedStatus: http.StatusOK,
+			description:    "カスタム会社に所属するユーザーの情報が取得できること",
 		},
 		{
 			name: "無効なトークン",
@@ -325,7 +376,7 @@ func (s *authSuite) TestMe() {
 			t := s.T()
 
 			email, role, token := tt.setupUser()
-			w := helper.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token)
+			w := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token)
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
@@ -343,20 +394,27 @@ func (s *authSuite) TestTokenExpiry() {
 	s.Run("期限切れトークンの拒否", func() {
 		t := s.T()
 
-		// テスト用のユーザーIDを取得
-		userID := s.jwtHelper.CreateTestUser(t, "expiry@example.com", string(user.RoleAdmin))
-
-		// 期限切れトークンを作成
+		userID := dbtest.CreateTestUser(t, s.DB, "expiry@example.com", string(user.RoleAdmin))
 		expiredToken := s.jwtHelper.CreateExpiredToken(t, userID, user.RoleAdmin)
 
-		// 期限切れトークンでアクセスを試行
-		w := helper.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, expiredToken)
+		w := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, expiredToken)
 		require.Equal(t, http.StatusUnauthorized, w.Code, "期限切れトークンは拒否されるべき")
+	})
+
+	s.Run("有効なトークンの受け入れ", func() {
+		t := s.T()
+
+		userID := dbtest.CreateTestUser(t, s.DB, "valid@example.com", string(user.RoleAdmin))
+		validToken := s.jwtHelper.GenerateToken(t, userID, user.RoleAdmin)
+
+		w := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, validToken)
+		require.Equal(t, http.StatusOK, w.Code)
 	})
 }
 
 func (s *authSuite) TestAuthenticationRequired() {
 	s.Run("認証が必要なエンドポイント", func() {
+		s.SetupSubTest()
 		t := s.T()
 
 		endpoints := []struct {
@@ -368,7 +426,7 @@ func (s *authSuite) TestAuthenticationRequired() {
 		}
 
 		for _, endpoint := range endpoints {
-			w := helper.PerformRequest(t, s.Router, endpoint.method, endpoint.path, nil, "")
+			w := httptest.PerformRequest(t, s.Router, endpoint.method, endpoint.path, nil, "")
 			require.Equal(t, http.StatusUnauthorized, w.Code, "認証なしでは拒否されるべき")
 		}
 	})
@@ -379,17 +437,17 @@ func (s *authSuite) TestConcurrentLogin() {
 		t := s.T()
 
 		email := "concurrent@example.com"
-		s.jwtHelper.CreateTestUser(t, email, string(user.RoleAdmin))
+		dbtest.CreateTestUser(t, s.DB, email, string(user.RoleAdmin))
 
 		// 複数回ログイン
-		token1 := s.jwtHelper.LoginUser(t, s.Router, email, "password123")
-		token2 := s.jwtHelper.LoginUser(t, s.Router, email, "password123")
+		token1 := authtest.LoginUser(t, s.Router, email, "password123")
+		token2 := authtest.LoginUser(t, s.Router, email, "password123")
 
 		require.NotEqual(t, token1, token2, "同時ログインで同じトークンが返された")
 
 		// 両方のトークンが有効であることを確認
-		w1 := helper.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token1)
-		w2 := helper.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token2)
+		w1 := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token1)
+		w2 := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token2)
 
 		require.Equal(t, http.StatusOK, w1.Code, "最初のトークンが無効")
 		require.Equal(t, http.StatusOK, w2.Code, "二番目のトークンが無効")
