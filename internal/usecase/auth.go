@@ -171,15 +171,12 @@ func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 func (a *authUseCaseImpl) ValidateToken(tokenString string) (uuid.UUID, user.Role, error) {
 	claims, err := a.jwtService.ValidateToken(tokenString)
 	if err != nil || claims.TokenType != jwt.TokenTypeAccess {
-		if err != nil {
-			return uuid.Nil, "", errs.Mark(err, ErrTokenValidation)
-		}
 		return uuid.Nil, "", ErrTokenValidation
 	}
 
 	role, err := user.NewRole(claims.Role)
 	if err != nil {
-		return uuid.Nil, "", errs.Mark(err, ErrTokenValidation)
+		return uuid.Nil, "", ErrTokenValidation
 	}
 
 	return claims.UserID, role, nil
