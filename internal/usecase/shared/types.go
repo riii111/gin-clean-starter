@@ -29,3 +29,10 @@ type IdempotencyRecord struct {
 	ResultReservationID *uuid.UUID
 	ExpiresAt           time.Time
 }
+
+type ReviewSnapshot struct {
+	ID            uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	ReservationID uuid.UUID
+}
