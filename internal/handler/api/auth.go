@@ -61,7 +61,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Step 1: Execute login command (returns LoginResult with UserID)
 	result, err := h.authCommands.Login(c.Request.Context(), req)
 	if err != nil {
 		switch {
@@ -84,7 +83,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Step 2: Get user data for response
 	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), result.UserID)
 	if err != nil {
 		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err)
@@ -93,7 +91,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Set token cookies
 	cookie.SetTokenCookies(c, h.cfg.Cookie, result.TokenPair.AccessToken, result.TokenPair.RefreshToken,
 		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
 

@@ -95,7 +95,6 @@ func TestFindByEmail(t *testing.T) {
 				assert.Nil(t, userReadModel)
 				assert.Empty(t, hash)
 
-				// エラー種別の検証
 				if tt.mockError == sql.ErrNoRows {
 					assert.True(t, infra.IsKind(err, infra.KindNotFound))
 				} else {
@@ -199,7 +198,6 @@ func TestFindByID(t *testing.T) {
 				assert.Error(t, err)
 				assert.Nil(t, userReadModel)
 
-				// エラー種別の検証
 				if tt.mockError == sql.ErrNoRows {
 					assert.True(t, infra.IsKind(err, infra.KindNotFound))
 				} else {
