@@ -43,10 +43,10 @@ type AuthCommands interface {
 type authCommandsImpl struct {
 	uow        shared.UnitOfWork
 	readStore  queries.UserReadStore
-	jwtService jwt.Service
+	jwtService *jwt.Service
 }
 
-func NewAuthCommands(uow shared.UnitOfWork, readStore queries.UserReadStore, jwtService jwt.Service) AuthCommands {
+func NewAuthCommands(uow shared.UnitOfWork, readStore queries.UserReadStore, jwtService *jwt.Service) AuthCommands {
 	return &authCommandsImpl{
 		uow:        uow,
 		readStore:  readStore,
