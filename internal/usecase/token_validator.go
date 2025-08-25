@@ -13,10 +13,10 @@ type TokenValidator interface {
 }
 
 type tokenValidatorImpl struct {
-	jwtService jwt.Service
+	jwtService *jwt.Service
 }
 
-func NewTokenValidator(jwtService jwt.Service) TokenValidator {
+func NewTokenValidator(jwtService *jwt.Service) TokenValidator {
 	return &tokenValidatorImpl{
 		jwtService: jwtService,
 	}

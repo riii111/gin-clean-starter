@@ -87,7 +87,7 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 
 		if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
 			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				slog.Warn("rollback failed", "attempt", attempt+1, "error", rollbackErr)
+				slog.Warn("rollback failed", "attempt", attempt+1, "error", rollbackErr.Error())
 			}
 		}
 
@@ -95,7 +95,7 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 			if attempt == maxRetries {
 				slog.Error("transaction failed after max retries",
 					"attempts", attempt+1,
-					"error", err)
+					"error", err.Error())
 				return errs.Mark(err, errMaxRetriesExceeded)
 			}
 			return err
@@ -106,7 +106,7 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 		slog.Warn("retrying transaction due to retryable error",
 			"attempt", attempt+1,
 			"wait_ms", waitTime.Milliseconds(),
-			"error", err)
+			"error", err.Error())
 
 		select {
 		case <-ctx.Done():
@@ -127,7 +127,7 @@ func (u *PostgresUoW) runReadOnlyTx(ctx context.Context, options pgx.TxOptions, 
 	defer func() {
 		if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
 			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				slog.Warn("failed to rollback read-only transaction", "error", rollbackErr)
+				slog.Warn("failed to rollback read-only transaction", "error", rollbackErr.Error())
 			}
 		}
 	}()

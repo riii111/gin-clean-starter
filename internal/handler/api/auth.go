@@ -47,7 +47,7 @@ func NewAuthHandler(authCommands commands.AuthCommands, userQueries queries.User
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req reqdto.LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		slog.Warn("Invalid request format in login", "error", err)
+		slog.Warn("Invalid request format in login", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err,
 			"Invalid request format", nil)
 		return
@@ -55,7 +55,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	credentials, err := req.ToDomain()
 	if err != nil {
-		slog.Warn("Invalid request data in login", "error", err)
+		slog.Warn("Invalid request data in login", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err,
 			"Invalid request data", nil)
 		return
@@ -67,16 +67,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		case errors.Is(err, commands.ErrInvalidCredentials),
 			errors.Is(err, commands.ErrUserNotFound):
 			slog.Warn("Login failed due to invalid credentials",
-				"email", credentials.Email(), "error", err)
+				"email", credentials.Email(), "error", err.Error())
 			httperr.AbortWithError(c, http.StatusUnauthorized, err,
 				"Invalid email or password", nil)
 		case errors.Is(err, commands.ErrUserInactive):
 			slog.Warn("Login failed due to inactive user",
-				"email", credentials.Email(), "error", err)
+				"email", credentials.Email(), "error", err.Error())
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
-			slog.Error("Unexpected error in login", "error", err)
+			slog.Error("Unexpected error in login", "error", err.Error())
 			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
@@ -108,7 +108,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Router /auth/logout [post]
 func (h *AuthHandler) Logout(c *gin.Context) {
 	cookie.ClearTokenCookies(c, h.cfg.Cookie)
-	c.Status(http.StatusNoContent)
+	c.JSON(http.StatusNoContent, nil)
 }
 
 // @Summary Get current user
@@ -134,15 +134,15 @@ func (h *AuthHandler) Me(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, queries.ErrUserNotFound):
-			slog.Warn("User not found", "user_id", userID, "error", err)
+			slog.Warn("User not found", "user_id", userID, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"User not found", nil)
 		case errors.Is(err, queries.ErrUserInactive):
-			slog.Warn("User account is inactive", "user_id", userID, "error", err)
+			slog.Warn("User account is inactive", "user_id", userID, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
-			slog.Error("Unexpected error in get current user", "user_id", userID, "error", err)
+			slog.Error("Unexpected error in get current user", "user_id", userID, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusInternalServerError, err,
 				"Internal server error", nil)
 		}
@@ -171,7 +171,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 
 	pair, err := h.authCommands.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
-		slog.Warn("Token refresh failed", "error", err)
+		slog.Warn("Token refresh failed", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusUnauthorized, err,
 			"Invalid or expired refresh token", nil)
 		return

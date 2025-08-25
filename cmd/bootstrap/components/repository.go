@@ -13,7 +13,11 @@ import (
 
 var RepositoryModule = fx.Module("repository",
 	fx.Provide(
-		NewSQLQueries,
+		NewSQLQueries, // Provide *sqlc.Queries for UnitOfWork
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.UserReadQueries)), // Also provide as interface for UserReadStore
+		),
 		NewDBTX,
 		fx.Annotate(
 			uow.NewPostgresUoW,

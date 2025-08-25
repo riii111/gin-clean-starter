@@ -1,6 +1,6 @@
 //go:build unit || e2e
 
-package helper
+package httptest
 
 import (
 	"encoding/json"

@@ -12,3 +12,7 @@ type LoginRequest struct {
 func (r *LoginRequest) ToDomain() (user.Credentials, error) {
 	return user.NewCredentials(r.Email, r.Password)
 }
+
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
