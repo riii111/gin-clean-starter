@@ -120,5 +120,5 @@ CROSS JOIN (
         ('test@example.com', 'admin'),
         ('admin@example.com', 'admin'),
         ('viewer2@example.com', 'viewer')
-) AS test_users(email, role)
+)
 WHERE companies.name = 'Default Company';

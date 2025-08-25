@@ -1,25 +1,25 @@
 package review
 
 import (
-    "time"
+	"time"
 
-    "gin-clean-starter/internal/pkg/clock"
+	"gin-clean-starter/internal/pkg/clock"
 
-    "github.com/google/uuid"
+	"github.com/google/uuid"
 )
 
 type Services struct {
-    Clock              clock.Clock
-    EligibilityChecker ReviewEligibilityChecker
+	Clock              clock.Clock
+	EligibilityChecker ReviewEligibilityChecker
 }
 
 type ReviewEligibilityInput struct {
-    ReservationID uuid.UUID
-    UserID        uuid.UUID
-    ResourceID    uuid.UUID
-    Now           time.Time
+	ReservationID uuid.UUID
+	UserID        uuid.UUID
+	ResourceID    uuid.UUID
+	Now           time.Time
 }
 
 type ReviewEligibilityChecker interface {
-    CanPostReview(input ReviewEligibilityInput) error
+	CanPostReview(input ReviewEligibilityInput) error
 }
