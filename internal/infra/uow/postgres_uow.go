@@ -184,6 +184,7 @@ type pgTx struct {
 
 	// Lazy-initialized repositories
 	reservationRepo  shared.ReservationRepository
+	reviewRepo       shared.ReviewRepository
 	idempotencyRepo  shared.IdempotencyRepository
 	notificationRepo shared.NotificationRepository
 	userRepo         shared.UserRepository
@@ -199,6 +200,13 @@ func (t *pgTx) Reservations() shared.ReservationRepository {
 		t.reservationRepo = repository.NewReservationRepository(t.uow.q, t.dbtx)
 	}
 	return t.reservationRepo
+}
+
+func (t *pgTx) Reviews() shared.ReviewRepository {
+	if t.reviewRepo == nil {
+		t.reviewRepo = repository.NewReviewRepository(t.uow.q, t.dbtx)
+	}
+	return t.reviewRepo
 }
 
 func (t *pgTx) Idempotency() shared.IdempotencyRepository {
