@@ -1,0 +1,16 @@
+name: "Setup Go Environment"
+description: "Sets up Go environment using checked-out code and installs dependencies"
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: "./go.mod"
+        cache-dependency-path: "./go.sum"
+        cache: true
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: .
+      run: go mod download

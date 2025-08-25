@@ -2,6 +2,7 @@ package converter
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"gin-clean-starter/internal/domain/reservation"
@@ -14,12 +15,17 @@ func ReservationToInfra(res *reservation.Reservation) sqlc.CreateReservationPara
 	timeSlot := res.TimeSlot()
 	tstzrange := fmt.Sprintf("[%s,%s)", timeSlot.Start().Format(time.RFC3339), timeSlot.End().Format(time.RFC3339))
 
+	cents := res.Price().Cents()
+	if cents > math.MaxInt32 || cents < math.MinInt32 {
+		panic(fmt.Sprintf("price cents out of int32 range: %d", cents))
+	}
+
 	params := sqlc.CreateReservationParams{
 		ResourceID: res.ResourceID(),
 		UserID:     res.UserID(),
 		Slot:       tstzrange,
 		Status:     res.Status().String(),
-		PriceCents: int32(res.Price().Cents()),
+		PriceCents: int32(cents),
 	}
 
 	if couponID := res.CouponID(); couponID != nil {

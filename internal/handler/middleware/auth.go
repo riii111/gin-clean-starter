@@ -14,7 +14,7 @@ import (
 )
 
 type AuthMiddleware struct {
-	authUseCase usecase.AuthUseCase
+	tokenValidator usecase.TokenValidator
 }
 
 const (
@@ -28,9 +28,9 @@ var roleHierarchy = map[user.Role]int{
 	user.RoleAdmin:    3,
 }
 
-func NewAuthMiddleware(authUseCase usecase.AuthUseCase) *AuthMiddleware {
+func NewAuthMiddleware(tokenValidator usecase.TokenValidator) *AuthMiddleware {
 	return &AuthMiddleware{
-		authUseCase: authUseCase,
+		tokenValidator: tokenValidator,
 	}
 }
 
@@ -55,7 +55,7 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
-		userID, role, err := m.authUseCase.ValidateToken(token)
+		userID, role, err := m.tokenValidator.ValidateToken(token)
 		if err != nil {
 			slog.Warn("Token validation failed in auth middleware", "error", err.Error())
 			c.JSON(http.StatusUnauthorized, gin.H{
@@ -124,7 +124,7 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 			return
 		}
 
-		userID, role, err := m.authUseCase.ValidateToken(token)
+		userID, role, err := m.tokenValidator.ValidateToken(token)
 		if err != nil {
 			// Invalid token; continue without aborting.
 			c.Next()

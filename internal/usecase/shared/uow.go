@@ -25,6 +25,7 @@ type Tx interface {
 	Reservations() ReservationRepository
 	Idempotency() IdempotencyRepository
 	Notifications() NotificationRepository
+	Users() UserRepository
 	Reads() CommandReads
 	DB() sqlc.DBTX
 }
@@ -56,4 +57,9 @@ type IdempotencyRepository interface {
 
 type NotificationRepository interface {
 	CreateJob(ctx context.Context, tx sqlc.DBTX, kind, topic string, payload []byte, runAt time.Time) error
+}
+
+type UserRepository interface {
+	UpdateLastLogin(ctx context.Context, tx sqlc.DBTX, userID uuid.UUID) error
+	Create(ctx context.Context, tx sqlc.DBTX, params sqlc.CreateUserParams) (uuid.UUID, error)
 }
