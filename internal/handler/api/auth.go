@@ -12,22 +12,25 @@ import (
 	"gin-clean-starter/internal/pkg/config"
 	"gin-clean-starter/internal/pkg/cookie"
 	"gin-clean-starter/internal/pkg/jwt"
-	"gin-clean-starter/internal/usecase"
+	"gin-clean-starter/internal/usecase/commands"
+	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
-	authUseCase usecase.AuthUseCase
-	jwtService  *jwt.Service
-	cfg         config.Config
+	authCommands commands.AuthCommands
+	userQueries  queries.UserQueries
+	jwtService   *jwt.Service
+	cfg          config.Config
 }
 
-func NewAuthHandler(authUseCase usecase.AuthUseCase, jwtService *jwt.Service, cfg config.Config) *AuthHandler {
+func NewAuthHandler(authCommands commands.AuthCommands, userQueries queries.UserQueries, jwtService *jwt.Service, cfg config.Config) *AuthHandler {
 	return &AuthHandler{
-		authUseCase: authUseCase,
-		jwtService:  jwtService,
-		cfg:         cfg,
+		authCommands: authCommands,
+		userQueries:  userQueries,
+		jwtService:   jwtService,
+		cfg:          cfg,
 	}
 }
 
@@ -58,18 +61,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	pair, user, err := h.authUseCase.Login(c.Request.Context(), req)
+	result, err := h.authCommands.Login(c.Request.Context(), req)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrInvalidCredentials),
-			errors.Is(err, usecase.ErrUserNotFound):
+		case errors.Is(err, commands.ErrInvalidCredentials),
+			errors.Is(err, commands.ErrUserNotFound):
 			slog.Warn("Login failed due to invalid credentials",
-				"email", credentials.Email, "error", err)
+				"email", credentials.Email(), "error", err)
 			httperr.AbortWithError(c, http.StatusUnauthorized, err,
 				"Invalid email or password", nil)
-		case errors.Is(err, usecase.ErrUserInactive):
+		case errors.Is(err, commands.ErrUserInactive):
 			slog.Warn("Login failed due to inactive user",
-				"email", credentials.Email, "error", err)
+				"email", credentials.Email(), "error", err)
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
@@ -80,7 +83,15 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	cookie.SetTokenCookies(c, h.cfg.Cookie, pair.AccessToken, pair.RefreshToken,
+	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), result.UserID)
+	if err != nil {
+		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err)
+		httperr.AbortWithError(c, http.StatusInternalServerError, err,
+			"Internal server error", nil)
+		return
+	}
+
+	cookie.SetTokenCookies(c, h.cfg.Cookie, result.TokenPair.AccessToken, result.TokenPair.RefreshToken,
 		h.jwtService.GetAccessTokenDuration(), h.jwtService.GetRefreshTokenDuration())
 
 	slog.Info("User logged in successfully", "user_id", user.ID)
@@ -119,14 +130,14 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 
-	user, err := h.authUseCase.GetCurrentUser(c.Request.Context(), userID)
+	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), userID)
 	if err != nil {
 		switch {
-		case errors.Is(err, usecase.ErrUserNotFound):
+		case errors.Is(err, queries.ErrUserNotFound):
 			slog.Warn("User not found", "user_id", userID, "error", err)
 			httperr.AbortWithError(c, http.StatusNotFound, err,
 				"User not found", nil)
-		case errors.Is(err, usecase.ErrUserInactive):
+		case errors.Is(err, queries.ErrUserInactive):
 			slog.Warn("User account is inactive", "user_id", userID, "error", err)
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
@@ -158,7 +169,7 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	pair, err := h.authUseCase.RefreshToken(c.Request.Context(), refreshToken)
+	pair, err := h.authCommands.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		slog.Warn("Token refresh failed", "error", err)
 		httperr.AbortWithError(c, http.StatusUnauthorized, err,

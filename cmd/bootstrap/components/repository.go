@@ -2,10 +2,8 @@ package components
 
 import (
 	"gin-clean-starter/internal/infra/readstore"
-	repo_impl "gin-clean-starter/internal/infra/repository"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/infra/uow"
-	"gin-clean-starter/internal/usecase"
 	"gin-clean-starter/internal/usecase/queries"
 	"gin-clean-starter/internal/usecase/shared"
 
@@ -22,8 +20,8 @@ var RepositoryModule = fx.Module("repository",
 			fx.As(new(shared.UnitOfWork)),
 		),
 		fx.Annotate(
-			repo_impl.NewUserRepository,
-			fx.As(new(usecase.UserRepository)),
+			readstore.NewUserReadStore,
+			fx.As(new(queries.UserReadStore)),
 		),
 		fx.Annotate(
 			readstore.NewReservationReadStore,

@@ -1,0 +1,142 @@
+name: Go CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/go_ci.yml"
+      - ".github/actions/setup-go/action.yml"
+      - "compose.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# ビルドジョブは不要（テストジョブ内の`go test`がコンパイル実行するため）
+jobs:
+  lint-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
+
+      - name: Install lint/format tools
+        run: |
+          # Consider pinning tool versions (e.g., using tools.go) for better reproducibility
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Lint Check
+        run: golangci-lint run ./...
+
+      - name: Format Check
+        run: |
+          test -z "$(golangci-lint fmt --diff)" || (echo "Code needs formatting with golangci-lint fmt" && exit 1)
+
+  test:
+    name: Run Unit and E2E Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: app
+          POSTGRES_USER: app
+          POSTGRES_DB: app
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 15432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
+      
+      - name: Install gotestsum
+        run: |
+          go install gotest.tools/gotestsum@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Run Unit and E2E Tests
+        env:
+          GIN_MODE: test
+          APP_ENV: test
+          DB_HOST: localhost
+          DB_PORT: 15432
+          DB_USER: app
+          DB_PASSWORD: app
+          DB_NAME: app
+          DB_SSL_MODE: disable
+          TESTCONTAINERS_RYUK_DISABLED: true    # CI環境ではコンテナ自動削除されるため不要
+          TESTCONTAINERS_CHECKS_DISABLE: true   # 起動チェックスキップで5-10秒短縮
+        run: |
+          NPROC=$(nproc)
+          # コンテナI/O負荷軽減のため並列度を制限
+          PKG_PARALLEL=$((NPROC > 4 ? 4 : NPROC))
+          FUNC_PARALLEL=$((NPROC * 4))
+          export GOMAXPROCS=${NPROC}
+          echo "CPU cores: ${NPROC}, GOMAXPROCS: ${GOMAXPROCS}"
+          echo "Package parallel (-p): ${PKG_PARALLEL}, Function parallel (-parallel): ${FUNC_PARALLEL}"
+          gotestsum \
+            --format pkgname-and-test-fails \
+            --no-summary=skipped \
+            --format-hide-empty-pkg \
+            --format-icons hivis \
+            --junitfile test-results.xml \
+            -- -p ${PKG_PARALLEL} -parallel ${FUNC_PARALLEL} -tags=e2e,unit ./...
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
+          retention-days: 7
+
+  scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: ./.github/actions/setup-go
+
+      - name: Install security tools
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Security Scan (gosec)
+        run: gosec ./...
+
+      - name: Security Scan (govulncheck)
+        run: govulncheck -tags=e2e,unit ./...

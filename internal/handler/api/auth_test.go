@@ -14,10 +14,12 @@ import (
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/pkg/config"
 	"gin-clean-starter/internal/pkg/jwt"
-	"gin-clean-starter/internal/usecase"
+	"gin-clean-starter/internal/usecase/commands"
+	"gin-clean-starter/internal/usecase/queries"
 	"gin-clean-starter/tests/common/builder"
 	"gin-clean-starter/tests/common/helper"
-	usecasemock "gin-clean-starter/tests/mock/usecase"
+	commandsmock "gin-clean-starter/tests/mock/commands"
+	queriesmock "gin-clean-starter/tests/mock/queries"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -27,10 +29,11 @@ import (
 
 type AuthHandlerTestSuite struct {
 	suite.Suite
-	router   *gin.Engine
-	mockCtrl *gomock.Controller
-	mockAUC  *usecasemock.MockAuthUseCase
-	handler  *api.AuthHandler
+	router       *gin.Engine
+	mockCtrl     *gomock.Controller
+	mockCommands *commandsmock.MockAuthCommands
+	mockQueries  *queriesmock.MockUserQueries
+	handler      *api.AuthHandler
 }
 
 func (s *AuthHandlerTestSuite) SetupTest() {
@@ -38,9 +41,10 @@ func (s *AuthHandlerTestSuite) SetupTest() {
 	s.router = gin.New()
 
 	s.mockCtrl = gomock.NewController(s.T())
-	s.mockAUC = usecasemock.NewMockAuthUseCase(s.mockCtrl)
+	s.mockCommands = commandsmock.NewMockAuthCommands(s.mockCtrl)
+	s.mockQueries = queriesmock.NewMockUserQueries(s.mockCtrl)
 	mockJWTService := &jwt.Service{} // Mock JWT service for testing
-	s.handler = api.NewAuthHandler(s.mockAUC, mockJWTService, config.NewTestConfig())
+	s.handler = api.NewAuthHandler(s.mockCommands, s.mockQueries, mockJWTService, config.NewTestConfig())
 
 	s.router.POST("/auth/login", s.handler.Login)
 	s.router.POST("/auth/logout", s.handler.Logout)
@@ -77,8 +81,14 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 	expectedRefresh := "test-refresh-token"
 
 	s.Run("正常系: 有効なリクエストで200 OKが返却される", func() {
-		s.mockAUC.EXPECT().Login(gomock.Any(), reqBody).
-			Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil).Times(1)
+		s.mockCommands.EXPECT().Login(gomock.Any(), reqBody).
+			Return(&commands.LoginResult{
+				UserID:     returnUser.ID,
+				TokenPair:  &commands.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh},
+				IsReplayed: false,
+			}, nil).Times(1)
+		s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), returnUser.ID).
+			Return(returnUser, nil).Times(1)
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 
 		var response resdto.LoginResponse
@@ -122,8 +132,14 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 						email, _ := requestMap["email"].(string)
 						password, _ := requestMap["password"].(string)
 						expectedReq := (&builder.AuthBuilder{Email: email, Password: password}).BuildDTO()
-						s.mockAUC.EXPECT().Login(gomock.Any(), expectedReq).
-							Return(&usecase.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh}, returnUser, nil)
+						s.mockCommands.EXPECT().Login(gomock.Any(), expectedReq).
+							Return(&commands.LoginResult{
+								UserID:     returnUser.ID,
+								TokenPair:  &commands.TokenPair{AccessToken: expectedToken, RefreshToken: expectedRefresh},
+								IsReplayed: false,
+							}, nil)
+						s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), returnUser.ID).
+							Return(returnUser, nil)
 					}
 					rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "")
 					if tc.expectCode == http.StatusOK {
@@ -139,31 +155,31 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
 		testCases := []struct {
 			name           string
-			usecaseError   error
+			commandsError  error
 			expectedStatus int
 			expectedMsg    string
 		}{
 			{
 				name:           "認証失敗",
-				usecaseError:   usecase.ErrInvalidCredentials,
+				commandsError:  commands.ErrInvalidCredentials,
 				expectedStatus: http.StatusUnauthorized,
 				expectedMsg:    "Invalid email or password",
 			},
 			{
 				name:           "ユーザー見つからない",
-				usecaseError:   usecase.ErrUserNotFound,
+				commandsError:  commands.ErrUserNotFound,
 				expectedStatus: http.StatusUnauthorized,
 				expectedMsg:    "Invalid email or password",
 			},
 			{
 				name:           "ユーザー無効",
-				usecaseError:   usecase.ErrUserInactive,
+				commandsError:  commands.ErrUserInactive,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Account is inactive",
 			},
 			{
 				name:           "内部サーバーエラー",
-				usecaseError:   errors.New("database error"),
+				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal server error",
 			},
@@ -171,8 +187,8 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name, func() {
-				s.mockAUC.EXPECT().Login(gomock.Any(), reqBody).
-					Return(nil, nil, tc.usecaseError).Times(1)
+				s.mockCommands.EXPECT().Login(gomock.Any(), reqBody).
+					Return(nil, tc.commandsError).Times(1)
 
 				rec := helper.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
 				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)
@@ -193,7 +209,7 @@ func (s *AuthHandlerTestSuite) TestMe() {
 	returnUser := builder.NewUserBuilder().BuildReadModel()
 
 	s.Run("正常系: 認証済みユーザー情報が返却される", func() {
-		s.mockAUC.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
+		s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
 			Return(returnUser, nil).Times(1)
 
 		rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
@@ -211,25 +227,25 @@ func (s *AuthHandlerTestSuite) TestMe() {
 	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
 		testCases := []struct {
 			name           string
-			usecaseError   error
+			commandsError  error
 			expectedStatus int
 			expectedMsg    string
 		}{
 			{
 				name:           "ユーザー見つからない",
-				usecaseError:   usecase.ErrUserNotFound,
+				commandsError:  queries.ErrUserNotFound,
 				expectedStatus: http.StatusNotFound,
 				expectedMsg:    "User not found",
 			},
 			{
 				name:           "ユーザー無効",
-				usecaseError:   usecase.ErrUserInactive,
+				commandsError:  queries.ErrUserInactive,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Account is inactive",
 			},
 			{
 				name:           "内部サーバーエラー",
-				usecaseError:   errors.New("database error"),
+				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal server error",
 			},
@@ -237,8 +253,8 @@ func (s *AuthHandlerTestSuite) TestMe() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name, func() {
-				s.mockAUC.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
-					Return(nil, tc.usecaseError).Times(1)
+				s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
+					Return(nil, tc.commandsError).Times(1)
 
 				rec := helper.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "bearer-token")
 				helper.AssertErrorResponse(s.T(), rec, tc.expectedStatus, tc.expectedMsg)

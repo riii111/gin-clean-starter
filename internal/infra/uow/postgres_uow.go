@@ -2,9 +2,10 @@ package uow
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"log/slog"
-	"math/rand"
 	"time"
 
 	"gin-clean-starter/internal/infra/readstore"
@@ -144,8 +145,23 @@ func shouldRetry(err error, attempt, maxRetries int) bool {
 
 func calculateBackoff(attempt int, base time.Duration) time.Duration {
 	waitTime := time.Duration(1<<attempt) * base
-	jitter := time.Duration(rand.Int63n(int64(waitTime / 5)))
-	return waitTime + jitter
+	jitter := cryptoRandInt63n(int64(waitTime / 5))
+	return waitTime + time.Duration(jitter)
+}
+
+func cryptoRandInt63n(n int64) int64 {
+	if n <= 0 {
+		return 0
+	}
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// Fallback to a simple calculation if crypto/rand fails
+		return 0
+	}
+	// Safe conversion: mask high bit to ensure positive int64
+	uval := binary.BigEndian.Uint64(buf[:]) & 0x7FFFFFFFFFFFFFFF
+	// #nosec G115 -- Intentionally safe conversion after masking
+	return int64(uval) % n
 }
 
 func isRetryableError(err error) bool {
@@ -170,6 +186,7 @@ type pgTx struct {
 	reservationRepo  shared.ReservationRepository
 	idempotencyRepo  shared.IdempotencyRepository
 	notificationRepo shared.NotificationRepository
+	userRepo         shared.UserRepository
 	commandReads     shared.CommandReads
 }
 
@@ -196,6 +213,13 @@ func (t *pgTx) Notifications() shared.NotificationRepository {
 		t.notificationRepo = repository.NewNotificationRepository(t.uow.q, t.dbtx)
 	}
 	return t.notificationRepo
+}
+
+func (t *pgTx) Users() shared.UserRepository {
+	if t.userRepo == nil {
+		t.userRepo = repository.NewUserRepository(t.uow.q)
+	}
+	return t.userRepo
 }
 
 func (t *pgTx) Reads() shared.CommandReads {
