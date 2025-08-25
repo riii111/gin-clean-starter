@@ -65,50 +65,50 @@ func (s *authSuite) TestLogin() {
 		description    string
 	}{
 		{
-			name:           "正常なログイン",
+			name:           "Successful login",
 			email:          "test@example.com",
 			password:       "password123",
 			expectedStatus: http.StatusOK,
-			description:    "有効な認証情報でログインできること",
+			description:    "Should login with valid credentials",
 		},
 		{
-			name:           "存在しないユーザー",
+			name:           "Nonexistent user",
 			email:          "nonexistent@example.com",
 			password:       "password123",
 			expectedStatus: http.StatusUnauthorized,
-			description:    "存在しないユーザーでログインできないこと",
+			description:    "Should reject nonexistent user",
 		},
 		{
-			name:           "間違ったパスワード",
+			name:           "Wrong password",
 			email:          "test@example.com",
 			password:       "wrongpassword",
 			expectedStatus: http.StatusUnauthorized,
-			description:    "間違ったパスワードでログインできないこと",
+			description:    "Should reject wrong password",
 		},
 		{
-			name:           "非アクティブユーザー",
+			name:           "Inactive user",
 			email:          "inactive@example.com",
 			password:       "password123",
 			expectedStatus: http.StatusForbidden,
-			description:    "非アクティブユーザーはログインできないこと",
+			description:    "Should reject inactive user",
 		},
 		{
-			name:           "空のメールアドレス",
+			name:           "Empty email",
 			email:          "",
 			password:       "password123",
 			expectedStatus: http.StatusBadRequest,
-			description:    "空のメールアドレスは拒否されること",
+			description:    "Should reject empty email",
 		},
 		{
-			name:           "空のパスワード",
+			name:           "Empty password",
 			email:          "test@example.com",
 			password:       "",
 			expectedStatus: http.StatusBadRequest,
-			description:    "空のパスワードは拒否されること",
+			description:    "Should reject empty password",
 		},
 	}
 
-	s.Run("動的データ構築テスト", func() {
+	s.Run("Dynamic data construction test", func() {
 		t := s.T()
 
 		baseData := map[string]any{
@@ -148,19 +148,19 @@ func (s *authSuite) TestLogin() {
 				}
 				err := httptest.DecodeResponseBody(t, w.Body, &loginRes)
 				require.NoError(t, err)
-				require.Equal(t, tt.email, loginRes.User.Email, "ユーザー情報が正しくない")
+				require.Equal(t, tt.email, loginRes.User.Email, "User info is incorrect")
 
 				accessCookie := httptest.ExtractCookie(w, "access_token")
 				refreshCookie := httptest.ExtractCookie(w, "refresh_token")
-				require.NotNil(t, accessCookie, "アクセストークンがクッキーに設定されていない")
-				require.NotNil(t, refreshCookie, "リフレッシュトークンがクッキーに設定されていない")
-				require.NotEmpty(t, accessCookie.Value, "アクセストークンが空です")
-				require.NotEmpty(t, refreshCookie.Value, "リフレッシュトークンが空です")
+				require.NotNil(t, accessCookie, "Access token not set in cookie")
+				require.NotNil(t, refreshCookie, "Refresh token not set in cookie")
+				require.NotEmpty(t, accessCookie.Value, "Access token is empty")
+				require.NotEmpty(t, refreshCookie.Value, "Refresh token is empty")
 
 				var lastLogin any
 				err = s.DB.QueryRow(s.T().Context(), "SELECT last_login FROM users WHERE email = $1", tt.email).Scan(&lastLogin)
 				require.NoError(t, err)
-				require.NotNil(t, lastLogin, "last_loginが更新されていない")
+				require.NotNil(t, lastLogin, "last_login not updated")
 			}
 		})
 	}
@@ -176,9 +176,9 @@ func (s *authSuite) TestRefresh() {
 		description    string
 	}{
 		{
-			name: "正常なリフレッシュ",
+			name: "Valid refresh",
 			setupCookies: func(t *testing.T) []*http.Cookie {
-				// ログインしてリフレッシュトークンを含むクッキーを取得
+				// Login and get cookies with refresh token
 				reqBody := request.LoginRequest{
 					Email:    "test@example.com",
 					Password: "password123",
@@ -188,25 +188,25 @@ func (s *authSuite) TestRefresh() {
 				return httptest.ExtractCookies(w)
 			},
 			expectedStatus: http.StatusOK,
-			description:    "有効なリフレッシュトークンでトークンが更新されること",
+			description:    "Should refresh tokens with valid refresh token",
 		},
 		{
-			name: "無効なリフレッシュトークン",
+			name: "Invalid refresh token",
 			setupCookies: func(t *testing.T) []*http.Cookie {
 				return []*http.Cookie{
 					{Name: "refresh_token", Value: "invalid-refresh-token"},
 				}
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "無効なリフレッシュトークンは拒否されること",
+			description:    "Should reject invalid refresh token",
 		},
 		{
-			name: "空のリフレッシュトークン",
+			name: "Empty refresh token",
 			setupCookies: func(t *testing.T) []*http.Cookie {
 				return []*http.Cookie{} // No cookies
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "リフレッシュトークンクッキーがない場合は拒否されること",
+			description:    "Should reject when refresh token cookie is missing",
 		},
 	}
 
@@ -221,7 +221,7 @@ func (s *authSuite) TestRefresh() {
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
-				// Check that response contains success message
+				// Check response contains success message
 				var refreshRes struct {
 					Message string `json:"message"`
 				}
@@ -229,7 +229,7 @@ func (s *authSuite) TestRefresh() {
 				require.NoError(t, err)
 				require.NotEmpty(t, refreshRes.Message)
 
-				// Check that new tokens are set in cookies
+				// Check new tokens are set in cookies
 				cookies := w.Result().Cookies()
 				var newAccessToken, newRefreshToken string
 				for _, cookie := range cookies {
@@ -239,15 +239,15 @@ func (s *authSuite) TestRefresh() {
 						newRefreshToken = cookie.Value
 					}
 				}
-				require.NotEmpty(t, newAccessToken, "新しいアクセストークンがクッキーに設定されていない")
-				require.NotEmpty(t, newRefreshToken, "新しいリフレッシュトークンがクッキーに設定されていない")
+				require.NotEmpty(t, newAccessToken, "New access token not set in cookie")
+				require.NotEmpty(t, newRefreshToken, "New refresh token not set in cookie")
 			}
 		})
 	}
 }
 
 func (s *authSuite) TestLogout() {
-	s.Run("クッキーベースのログアウト", func() {
+	s.Run("Cookie-based logout", func() {
 		t := s.T()
 
 		reqBody := request.LoginRequest{
@@ -269,28 +269,28 @@ func (s *authSuite) TestLogout() {
 		description    string
 	}{
 		{
-			name: "正常なログアウト",
+			name: "Valid logout",
 			setupToken: func() string {
 				return authtest.LoginUser(s.T(), s.Router, "test@example.com", "password123")
 			},
 			expectedStatus: http.StatusNoContent,
-			description:    "有効なトークンでログアウトできること",
+			description:    "Should logout with valid token",
 		},
 		{
-			name: "無効なトークン",
+			name: "Invalid token",
 			setupToken: func() string {
 				return "invalid-token"
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "無効なトークンでログアウトできないこと",
+			description:    "Should reject invalid token",
 		},
 		{
-			name: "トークンなし",
+			name: "No token",
 			setupToken: func() string {
 				return ""
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "トークンなしでログアウトできないこと",
+			description:    "Should reject when no token provided",
 		},
 	}
 
@@ -315,7 +315,7 @@ func (s *authSuite) TestMe() {
 		description    string
 	}{
 		{
-			name: "管理者ユーザーの情報取得",
+			name: "Admin user info",
 			setupUser: func() (string, string, string) {
 				email := "admin@example.com"
 				role := string(user.RoleAdmin)
@@ -323,10 +323,10 @@ func (s *authSuite) TestMe() {
 				return email, role, token
 			},
 			expectedStatus: http.StatusOK,
-			description:    "管理者ユーザーの情報が取得できること",
+			description:    "Should get admin user info",
 		},
 		{
-			name: "Viewerユーザーの情報取得",
+			name: "Viewer user info",
 			setupUser: func() (string, string, string) {
 				email := "viewer2@example.com"
 				role := string(user.RoleViewer)
@@ -334,10 +334,10 @@ func (s *authSuite) TestMe() {
 				return email, role, token
 			},
 			expectedStatus: http.StatusOK,
-			description:    "Viewerユーザーの情報が取得できること",
+			description:    "Should get viewer user info",
 		},
 		{
-			name: "カスタム会社のユーザー情報取得",
+			name: "Custom company user info",
 			setupUser: func() (string, string, string) {
 				companyID := dbtest.CreateTestCompany(s.T(), s.DB, "Custom Test Corp")
 				email := "custom@testcorp.com"
@@ -351,23 +351,23 @@ func (s *authSuite) TestMe() {
 				return email, string(user.RoleAdmin), token
 			},
 			expectedStatus: http.StatusOK,
-			description:    "カスタム会社に所属するユーザーの情報が取得できること",
+			description:    "Should get user info for custom company",
 		},
 		{
-			name: "無効なトークン",
+			name: "Invalid token",
 			setupUser: func() (string, string, string) {
 				return "", "", "invalid-token"
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "無効なトークンでは情報取得できないこと",
+			description:    "Should reject invalid token",
 		},
 		{
-			name: "トークンなし",
+			name: "No token",
 			setupUser: func() (string, string, string) {
 				return "", "", ""
 			},
 			expectedStatus: http.StatusUnauthorized,
-			description:    "トークンなしでは情報取得できないこと",
+			description:    "Should reject when no token provided",
 		},
 	}
 
@@ -380,28 +380,28 @@ func (s *authSuite) TestMe() {
 			require.Equal(t, tt.expectedStatus, w.Code, tt.description)
 
 			if tt.expectedStatus == http.StatusOK {
-				// レスポンス内容をチェック
+				// Check response content
 				responseBody := w.Body.String()
-				require.Contains(t, responseBody, email, "レスポンスにメールアドレスが含まれていない")
-				require.Contains(t, responseBody, role, "レスポンスにロールが含まれていない")
-				require.NotContains(t, responseBody, "password", "レスポンスにパスワード情報が含まれている")
+				require.Contains(t, responseBody, email, "Response should contain email")
+				require.Contains(t, responseBody, role, "Response should contain role")
+				require.NotContains(t, responseBody, "password", "Response should not contain password")
 			}
 		})
 	}
 }
 
 func (s *authSuite) TestTokenExpiry() {
-	s.Run("期限切れトークンの拒否", func() {
+	s.Run("Expired token rejection", func() {
 		t := s.T()
 
 		userID := dbtest.CreateTestUser(t, s.DB, "expiry@example.com", string(user.RoleAdmin))
 		expiredToken := s.jwtHelper.CreateExpiredToken(t, userID, user.RoleAdmin)
 
 		w := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, expiredToken)
-		require.Equal(t, http.StatusUnauthorized, w.Code, "期限切れトークンは拒否されるべき")
+		require.Equal(t, http.StatusUnauthorized, w.Code, "Should reject expired token")
 	})
 
-	s.Run("有効なトークンの受け入れ", func() {
+	s.Run("Valid token acceptance", func() {
 		t := s.T()
 
 		userID := dbtest.CreateTestUser(t, s.DB, "valid@example.com", string(user.RoleAdmin))
@@ -413,7 +413,7 @@ func (s *authSuite) TestTokenExpiry() {
 }
 
 func (s *authSuite) TestAuthenticationRequired() {
-	s.Run("認証が必要なエンドポイント", func() {
+	s.Run("Authentication required endpoints", func() {
 		s.SetupSubTest()
 		t := s.T()
 
@@ -427,29 +427,29 @@ func (s *authSuite) TestAuthenticationRequired() {
 
 		for _, endpoint := range endpoints {
 			w := httptest.PerformRequest(t, s.Router, endpoint.method, endpoint.path, nil, "")
-			require.Equal(t, http.StatusUnauthorized, w.Code, "認証なしでは拒否されるべき")
+			require.Equal(t, http.StatusUnauthorized, w.Code, "Should reject without authentication")
 		}
 	})
 }
 
 func (s *authSuite) TestConcurrentLogin() {
-	s.Run("同時ログイン", func() {
+	s.Run("Concurrent login", func() {
 		t := s.T()
 
 		email := "concurrent@example.com"
 		dbtest.CreateTestUser(t, s.DB, email, string(user.RoleAdmin))
 
-		// 複数回ログイン
+		// Multiple logins
 		token1 := authtest.LoginUser(t, s.Router, email, "password123")
 		token2 := authtest.LoginUser(t, s.Router, email, "password123")
 
-		require.NotEqual(t, token1, token2, "同時ログインで同じトークンが返された")
+		require.NotEqual(t, token1, token2, "Same token returned for concurrent login")
 
-		// 両方のトークンが有効であることを確認
+		// Verify both tokens are valid
 		w1 := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token1)
 		w2 := httptest.PerformRequest(t, s.Router, http.MethodGet, meURL, nil, token2)
 
-		require.Equal(t, http.StatusOK, w1.Code, "最初のトークンが無効")
-		require.Equal(t, http.StatusOK, w2.Code, "二番目のトークンが無効")
+		require.Equal(t, http.StatusOK, w1.Code, "First token is invalid")
+		require.Equal(t, http.StatusOK, w2.Code, "Second token is invalid")
 	})
 }

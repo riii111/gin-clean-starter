@@ -53,7 +53,6 @@ echo "  test-unit              - Run unit tests only"
 echo "  test-e2e               - Run E2E tests only"
 echo "  test-all               - Run all tests (unit + e2e)"
 echo "  test-clean             - Clean Go test cache"
-echo "  test-clean-containers  - Clean up remaining testcontainers"
 echo ""
 echo "Mock:"
 echo "  mock:gen     - Generate mock files using mockgen"
@@ -94,7 +93,6 @@ test-unit = "docker compose exec app gotestsum --format pkgname --format-hide-em
 test-e2e = "docker compose exec app gotestsum --format testname --format-icons hivis -- -tags=e2e ./tests/e2e/..."
 test-all = "docker compose exec app gotestsum --format pkgname-and-test-fails --format-hide-empty-pkg --format-icons hivis -- -tags=e2e,unit ./..."
 test-clean = "docker compose exec app go clean -testcache"
-test-clean-containers = "docker container prune -f --filter 'label=org.testcontainers=true'"
 
 # Mock generation
 "mock:gen" = "bash scripts/generate_mocks.sh"
