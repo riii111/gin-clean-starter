@@ -325,7 +325,6 @@ func startPostgreSQLContainerOnce(t *testing.T) {
 				return fmt.Sprintf("postgres://%s:%s@%s:%s/postgres?sslmode=disable",
 					testUser, testPassword, host, port.Port())
 			}).WithStartupTimeout(60 * time.Second),
-			Name:   "postgres-e2e",
 			Labels: map[string]string{"purpose": "e2e-tests"},
 		}
 
