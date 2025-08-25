@@ -336,7 +336,7 @@ func startGenericContainer(req testcontainers.ContainerRequest, timeoutSec int) 
 	return testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 		ContainerRequest: req,
 		Started:          true,
-		Reuse:            true,
+		// Reuse: true, // Removed to enable proper cleanup by ryuk
 	})
 }
 
@@ -387,6 +387,17 @@ func startPostgreSQLContainerOnce(t *testing.T) {
 		var err error
 		postgresTestContainer, err = startGenericContainer(req, 180)
 		require.NoError(t, err, "PostgreSQLコンテナの起動に失敗")
+
+		// コンテナの手動クリーンアップを登録 (RYUK無効時用)
+		t.Cleanup(func() {
+			if postgresTestContainer != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if err := postgresTestContainer.Terminate(ctx); err != nil {
+					slog.Warn("PostgreSQLコンテナの終了に失敗しました", "error", err.Error())
+				}
+			}
+		})
 	})
 }
 
