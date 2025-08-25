@@ -33,8 +33,6 @@ services:
       DATABASE_URL: postgres://app:app@db:5432/app?sslmode=disable
       # testcontainers Docker-in-Docker configuration
       TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
-      TESTCONTAINERS_RYUK_DISABLED: "true"
-      DOCKER_HOST: unix:///var/run/docker.sock
     ports:
       - "8888:8888"
     volumes:
