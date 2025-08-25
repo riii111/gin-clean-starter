@@ -27,7 +27,7 @@ func CreateTestUser(t *testing.T, db DBLike, email, role string) uuid.UUID {
 	require.NoError(t, err)
 
 	passwordHash := "$2a$12$uhAjVE9f92IGYv3E25pJNetg.27lVt0p7jmLWjqjmhOg92ldPS0A."
-	tag, err := db.Exec(ctx, "INSERT INTO users (id, email, password_hash, role, company_id, is_active) VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT (email) DO NOTHING",
+	tag, err := db.Exec(ctx, "INSERT INTO users (id, email, password_hash, role, company_id, is_active) VALUES ($1, $2, $3, $4, $5, true) ON CONFLICT (email) WHERE is_active = true DO NOTHING",
 		userID, email, passwordHash, role, companyID)
 	require.NoError(t, err)
 
