@@ -10,34 +10,52 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-mkdir -p tests/mock/usecase
 generated_count=0
 
-# Process specific files or all usecase files
-if [ $# -eq 0 ]; then
-    files="internal/usecase/*.go"
-else
-    files=""
-    for arg in "$@"; do
-        files="$files internal/usecase/${arg}.go"
-    done
-fi
+# Create mock directories
+mkdir -p tests/mock/usecase
+mkdir -p tests/mock/commands
+mkdir -p tests/mock/queries
 
-for file in $files; do
-    [ -f "$file" ] || continue
+# Function to generate mock for a specific file
+generate_mock() {
+    local source_file="$1"
+    local mock_dir="$2"
+    local mock_package="$3"
     
-    filename=$(basename "$file" .go)
+    [ -f "$source_file" ] || return
     
-    if grep -q "type.*UseCase interface" "$file"; then
-        echo -e "${GREEN}Generating mock: ${filename}.go${NC}"
-        mockgen -source="$file" \
-                -destination="tests/mock/usecase/${filename}_mock.go" \
-                -package=usecasemock
+    filename=$(basename "$source_file" .go)
+    
+    # Check if file contains interfaces
+    if grep -q "type.*interface" "$source_file"; then
+        echo -e "${GREEN}Generating mock: ${source_file} -> ${mock_dir}${NC}"
+        mockgen -source="$source_file" \
+                -destination="${mock_dir}/${filename}_mock.go" \
+                -package="$mock_package"
         generated_count=$((generated_count + 1))
     fi
+}
+
+# Generate mocks for different directories
+echo "Generating mocks for usecase layer..."
+
+# TokenValidator (usecase root)
+generate_mock "internal/usecase/token_validator.go" "tests/mock/usecase" "usecasemock"
+
+# Commands
+for file in internal/usecase/commands/*.go; do
+    generate_mock "$file" "tests/mock/commands" "commandsmock"
+done
+
+# Queries  
+for file in internal/usecase/queries/*.go; do
+    generate_mock "$file" "tests/mock/queries" "queriesmock"
 done
 
 if [ $generated_count -eq 0 ]; then
-    echo -e "${RED}No UseCase interfaces found${NC}"
+    echo -e "${RED}No interfaces found${NC}"
     exit 1
 fi
+
+echo -e "${GREEN}Generated $generated_count mock files${NC}"
