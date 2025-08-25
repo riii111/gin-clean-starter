@@ -241,7 +241,7 @@ func (s *authSuite) TestLogout() {
 			setupToken: func() string {
 				return s.jwtHelper.LoginUser(s.T(), s.Router, "test@example.com", "password123")
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusNoContent,
 			description:    "有効なトークンでログアウトできること",
 		},
 		{

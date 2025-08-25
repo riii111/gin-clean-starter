@@ -109,9 +109,6 @@ func (a *authUseCaseImpl) RefreshToken(ctx context.Context, refreshToken string)
 
 	userReadModel, err := a.userRepo.FindByID(ctx, claims.UserID)
 	if err != nil || userReadModel == nil {
-		if err != nil {
-			return nil, errs.Mark(err, ErrUserNotFound)
-		}
 		return nil, ErrUserNotFound
 	}
 
@@ -139,16 +136,20 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 	userReadModel, hashedPassword, err := a.userRepo.FindByEmail(ctx, credentials.Email())
 	if err != nil {
 		// Return same error as password mismatch to prevent user enumeration attacks
-		return nil, errs.Mark(err, ErrInvalidCredentials)
+		return nil, ErrInvalidCredentials
 	}
 
-	if userReadModel == nil || !userReadModel.IsActive {
+	if userReadModel == nil {
+		return nil, ErrUserNotFound
+	}
+
+	if !userReadModel.IsActive {
 		return nil, ErrUserInactive
 	}
 
 	err = password.ComparePassword(hashedPassword, credentials.Password().Value())
 	if err != nil {
-		return nil, errs.Mark(err, ErrInvalidCredentials)
+		return nil, ErrInvalidCredentials
 	}
 
 	return userReadModel, nil
@@ -157,9 +158,6 @@ func (a *authUseCaseImpl) validateUser(ctx context.Context, credentials user.Cre
 func (a *authUseCaseImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*queries.AuthorizedUserView, error) {
 	user, err := a.userRepo.FindByID(ctx, userID)
 	if err != nil || user == nil {
-		if err != nil {
-			return nil, errs.Mark(err, ErrUserNotFound)
-		}
 		return nil, ErrUserNotFound
 	}
 
