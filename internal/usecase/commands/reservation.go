@@ -69,7 +69,7 @@ type reservationUseCaseImpl struct {
 	clock    clock.Clock
 }
 
-func NewReservationUseCase(
+func NewReservationCommands(
 	uow shared.UnitOfWork,
 	services *reservation.Services,
 	clock clock.Clock,

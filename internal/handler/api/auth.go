@@ -53,26 +53,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	credentials, err := req.ToDomain()
-	if err != nil {
-		slog.Warn("Invalid request data in login", "error", err.Error())
-		httperr.AbortWithError(c, http.StatusBadRequest, err,
-			"Invalid request data", nil)
-		return
-	}
-
 	result, err := h.authCommands.Login(c.Request.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, commands.ErrInvalidCredentials),
 			errors.Is(err, commands.ErrUserNotFound):
 			slog.Warn("Login failed due to invalid credentials",
-				"email", credentials.Email(), "error", err.Error())
+				"email", req.Email, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusUnauthorized, err,
 				"Invalid email or password", nil)
 		case errors.Is(err, commands.ErrUserInactive):
 			slog.Warn("Login failed due to inactive user",
-				"email", credentials.Email(), "error", err.Error())
+				"email", req.Email, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:

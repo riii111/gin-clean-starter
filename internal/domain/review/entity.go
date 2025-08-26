@@ -17,17 +17,7 @@ type Review struct {
 	updatedAt     time.Time
 }
 
-func NewReview(services *Services, userID, resourceID, reservationID uuid.UUID, rating Rating, comment Comment) (*Review, error) {
-	now := services.Clock.Now()
-	if err := services.EligibilityChecker.CanPostReview(EligibilityInput{
-		ReservationID: reservationID,
-		UserID:        userID,
-		ResourceID:    resourceID,
-		Now:           now,
-	}); err != nil {
-		return nil, err
-	}
-
+func NewReview(userID, resourceID, reservationID uuid.UUID, rating Rating, comment Comment, now time.Time) *Review {
 	return &Review{
 		id:            uuid.New(),
 		userID:        userID,
@@ -35,7 +25,9 @@ func NewReview(services *Services, userID, resourceID, reservationID uuid.UUID, 
 		reservationID: reservationID,
 		rating:        rating,
 		comment:       comment,
-	}, nil
+		createdAt:     now,
+		updatedAt:     now,
+	}
 }
 
 func ReconstructReview(

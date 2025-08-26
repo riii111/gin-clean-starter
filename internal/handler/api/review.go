@@ -48,12 +48,7 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
 		return
 	}
-	result, err := h.cmds.CreateReview(c.Request.Context(), commands.CreateReviewRequest{
-		ResourceID:    req.ResourceID,
-		ReservationID: req.ReservationID,
-		Rating:        req.Rating,
-		Comment:       req.Comment,
-	}, userID)
+	result, err := h.cmds.CreateReview(c.Request.Context(), req, userID)
 	if err != nil {
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Create review failed", nil)
 		return
@@ -119,7 +114,7 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, "Invalid request", nil)
 		return
 	}
-	if err = h.cmds.UpdateReview(c.Request.Context(), id, commands.UpdateReviewRequest{Rating: req.Rating, Comment: req.Comment}, actorID); err != nil {
+	if err = h.cmds.UpdateReview(c.Request.Context(), id, req, actorID); err != nil {
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Update failed", nil)
 		return
 	}
