@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	"gin-clean-starter/internal/infra/readstore"
@@ -185,6 +186,7 @@ type pgTx struct {
 	// Lazy-initialized repositories
 	reservationRepo  shared.ReservationRepository
 	reviewRepo       shared.ReviewRepository
+	ratingStatsRepo  shared.RatingStatsRepository
 	idempotencyRepo  shared.IdempotencyRepository
 	notificationRepo shared.NotificationRepository
 	userRepo         shared.UserRepository
@@ -207,6 +209,13 @@ func (t *pgTx) Reviews() shared.ReviewRepository {
 		t.reviewRepo = repository.NewReviewRepository(t.uow.q, t.dbtx)
 	}
 	return t.reviewRepo
+}
+
+func (t *pgTx) RatingStats() shared.RatingStatsRepository {
+	if t.ratingStatsRepo == nil {
+		t.ratingStatsRepo = repository.NewRatingStatsRepository(t.uow.q, t.dbtx)
+	}
+	return t.ratingStatsRepo
 }
 
 func (t *pgTx) Idempotency() shared.IdempotencyRepository {
@@ -248,6 +257,7 @@ type commandReads struct {
 	resourceStore    *readstore.ResourceReadStore
 	couponStore      *readstore.CouponReadStore
 	reservationStore *readstore.ReservationReadStore
+	reviewStore      *readstore.ReviewReadStore
 	idempotencyStore *readstore.IdempotencyReadStore
 }
 
@@ -300,13 +310,27 @@ func (r *commandReads) ReservationByID(ctx context.Context, id uuid.UUID) (*shar
 		return nil, err
 	}
 
+	endTime := parseSlotEndTime(reservation.Slot)
 	snapshot := &shared.ReservationSnapshot{
 		ID:         reservation.ID,
 		ResourceID: reservation.ResourceID,
 		UserID:     reservation.UserID,
 		Status:     reservation.Status,
+		EndTime:    endTime,
 	}
 	return snapshot, nil
+}
+
+func parseSlotEndTime(slot string) time.Time {
+	parts := strings.Split(slot, "/")
+	if len(parts) != 2 {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, parts[1])
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 func (r *commandReads) IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*shared.IdempotencyRecord, error) {
@@ -328,4 +352,21 @@ func (r *commandReads) IdempotencyByKey(ctx context.Context, key, userID uuid.UU
 		ExpiresAt:           record.ExpiresAt,
 	}
 	return snapshot, nil
+}
+
+func (r *commandReads) ReviewByID(ctx context.Context, id uuid.UUID) (*shared.ReviewSnapshot, error) {
+	if r.reviewStore == nil {
+		r.reviewStore = readstore.NewReviewReadStore(r.uow.q, r.dbtx)
+	}
+	rv, err := r.reviewStore.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	snap := &shared.ReviewSnapshot{
+		ID:            rv.ID,
+		UserID:        rv.UserID,
+		ResourceID:    rv.ResourceID,
+		ReservationID: rv.ReservationID,
+	}
+	return snap, nil
 }
