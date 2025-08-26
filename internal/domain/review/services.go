@@ -10,16 +10,16 @@ import (
 
 type Services struct {
 	Clock              clock.Clock
-	EligibilityChecker ReviewEligibilityChecker
+	EligibilityChecker EligibilityChecker
 }
 
-type ReviewEligibilityInput struct {
+type EligibilityInput struct {
 	ReservationID uuid.UUID
 	UserID        uuid.UUID
 	ResourceID    uuid.UUID
 	Now           time.Time
 }
 
-type ReviewEligibilityChecker interface {
-	CanPostReview(input ReviewEligibilityInput) error
+type EligibilityChecker interface {
+	CanPostReview(input EligibilityInput) error
 }

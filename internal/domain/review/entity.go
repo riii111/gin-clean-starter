@@ -19,7 +19,7 @@ type Review struct {
 
 func NewReview(services *Services, userID, resourceID, reservationID uuid.UUID, rating Rating, comment Comment) (*Review, error) {
 	now := services.Clock.Now()
-	if err := services.EligibilityChecker.CanPostReview(ReviewEligibilityInput{
+	if err := services.EligibilityChecker.CanPostReview(EligibilityInput{
 		ReservationID: reservationID,
 		UserID:        userID,
 		ResourceID:    resourceID,
