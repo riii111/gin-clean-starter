@@ -2,6 +2,7 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
+  cmd = "swag init -g cmd/main.go -o docs && go build -o ./tmp/main ./cmd/main.go"
   cmd = "go build -o ./tmp/main ./cmd/main.go"
   bin = "./tmp/main"
   stop_on_error = true
