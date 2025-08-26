@@ -19,9 +19,9 @@ type route struct {
 	Mw      []gin.HandlerFunc
 }
 
-func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, authMiddleware *middleware.AuthMiddleware) {
+func NewRouter(engine *gin.Engine, cfg config.Config, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, reviewHandler *api.ReviewHandler, authMiddleware *middleware.AuthMiddleware) {
 	setupMiddleware(engine, cfg)
-	setupRoutes(engine, authHandler, reservationHandler, authMiddleware)
+	setupRoutes(engine, authHandler, reservationHandler, reviewHandler, authMiddleware)
 }
 
 func setupMiddleware(engine *gin.Engine, cfg config.Config) {
@@ -32,7 +32,7 @@ func setupMiddleware(engine *gin.Engine, cfg config.Config) {
 	engine.Use(middleware.ErrorHandler())
 }
 
-func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, authMiddleware *middleware.AuthMiddleware) {
+func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, reservationHandler *api.ReservationHandler, reviewHandler *api.ReviewHandler, authMiddleware *middleware.AuthMiddleware) {
 	engine.GET("/health", healthCheck)
 
 	if gin.Mode() == gin.DebugMode {
@@ -65,6 +65,34 @@ func setupRoutes(engine *gin.Engine, authHandler *api.AuthHandler, reservationHa
 				{Method: http.MethodGet, Path: "/:id", Handler: reservationHandler.GetReservation},
 			})
 		}
+
+		reviews := apiGroup.Group("/reviews")
+		{
+			addRoutes(reviews, []route{
+				{Method: http.MethodGet, Path: "/:id", Handler: reviewHandler.Get},
+			})
+			// Auth required for write operations
+			authReviews := reviews.Group("")
+			authReviews.Use(authMiddleware.RequireAuth())
+			addRoutes(authReviews, []route{
+				{Method: http.MethodPost, Path: "", Handler: reviewHandler.Create},
+				{Method: http.MethodPut, Path: "/:id", Handler: reviewHandler.Update},
+				{Method: http.MethodDelete, Path: "/:id", Handler: reviewHandler.Delete},
+			})
+		}
+
+		// Resource-specific reviews and stats (public)
+		addRoutes(apiGroup, []route{
+			{Method: http.MethodGet, Path: "/resources/:id/reviews", Handler: reviewHandler.ListByResource},
+			{Method: http.MethodGet, Path: "/resources/:id/rating-stats", Handler: reviewHandler.ResourceRatingStats},
+		})
+
+		// User reviews (requires auth for RBAC)
+		userReviews := apiGroup.Group("/users")
+		userReviews.Use(authMiddleware.RequireAuth())
+		addRoutes(userReviews, []route{
+			{Method: http.MethodGet, Path: "/:id/reviews", Handler: reviewHandler.ListByUser},
+		})
 	}
 }
 
