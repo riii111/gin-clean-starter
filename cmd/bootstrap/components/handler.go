@@ -12,6 +12,7 @@ var HandlerModule = fx.Module("handler",
 	fx.Provide(
 		api.NewAuthHandler,
 		api.NewReservationHandler,
+		api.NewReviewHandler,
 		middleware.NewAuthMiddleware,
 	),
 	fx.Invoke(handler.NewRouter),

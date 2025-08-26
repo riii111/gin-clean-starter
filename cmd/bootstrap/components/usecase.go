@@ -27,5 +27,6 @@ var UseCaseModule = fx.Module("usecase",
 		queries.NewUserQueries,
 		usecase.NewTokenValidator,
 		commands.NewReservationUseCase,
+		commands.NewReviewUseCase,
 	),
 )

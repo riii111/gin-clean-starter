@@ -31,7 +31,12 @@ var RepositoryModule = fx.Module("repository",
 			readstore.NewReservationReadStore,
 			fx.As(new(queries.ReservationReadStore)),
 		),
+		fx.Annotate(
+			readstore.NewReviewReadStore,
+			fx.As(new(queries.ReviewReadStore)),
+		),
 		queries.NewReservationQueries,
+		queries.NewReviewQueries,
 	),
 )
 
