@@ -5,13 +5,16 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/infra"
+	"gin-clean-starter/internal/pkg/errs"
 
 	"github.com/google/uuid"
 )
 
 var (
-	ErrReviewNotFound = ErrReservationNotFound
-	ErrReviewAccess   = ErrReservationAccess
+	ErrReviewNotFound     = errs.New("review not found")
+	ErrReviewAccess       = errs.New("review access denied")
+	ErrReviewQueryFailed  = errs.New("review query failed")
+	ErrInvalidCursorQuery = errs.New("invalid cursor for review query")
 )
 
 type ReviewView struct {
@@ -82,7 +85,7 @@ func (q *reviewQueriesImpl) GetByID(ctx context.Context, id uuid.UUID) (*ReviewV
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrReviewNotFound
 		}
-		return nil, err
+		return nil, errs.Mark(err, ErrReviewQueryFailed)
 	}
 	return rv, nil
 }
@@ -96,12 +99,12 @@ func (q *reviewQueriesImpl) ListByResource(ctx context.Context, resourceID uuid.
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
-			return nil, nil, ErrInvalidCursor
+			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
 		rows, err = q.repo.FindByResourceKeyset(ctx, resourceID, lastCreatedAt, lastID, int32(limit+1), filters.MinRating, filters.MaxRating)
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
 	}
 	var next *Cursor
 	if len(rows) > limit {
@@ -131,12 +134,12 @@ func (q *reviewQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, ac
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
-			return nil, nil, ErrInvalidCursor
+			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
 		rows, err = q.repo.FindByUserKeyset(ctx, userID, lastCreatedAt, lastID, int32(limit+1))
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
 	}
 	var next *Cursor
 	if len(rows) > limit {
@@ -148,5 +151,9 @@ func (q *reviewQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, ac
 }
 
 func (q *reviewQueriesImpl) GetResourceRatingStats(ctx context.Context, resourceID uuid.UUID) (*ResourceRatingStats, error) {
-	return q.repo.GetResourceRatingStats(ctx, resourceID)
+	stats, err := q.repo.GetResourceRatingStats(ctx, resourceID)
+	if err != nil {
+		return nil, errs.Mark(err, ErrReviewQueryFailed)
+	}
+	return stats, nil
 }
