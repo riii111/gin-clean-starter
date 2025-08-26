@@ -6,15 +6,15 @@ import (
 
 type ReviewResponse struct {
 	ID            string `json:"id"`
-	UserID        string `json:"user_id"`
-	UserEmail     string `json:"user_email"`
-	ResourceID    string `json:"resource_id"`
-	ResourceName  string `json:"resource_name"`
-	ReservationID string `json:"reservation_id"`
+	UserID        string `json:"userId"`
+	UserEmail     string `json:"userEmail"`
+	ResourceID    string `json:"resourceId"`
+	ResourceName  string `json:"resourceName"`
+	ReservationID string `json:"reservationId"`
 	Rating        int32  `json:"rating"`
 	Comment       string `json:"comment"`
-	CreatedAt     int64  `json:"created_at"`
-	UpdatedAt     int64  `json:"updated_at"`
+	CreatedAt     int64  `json:"createdAt"`
+	UpdatedAt     int64  `json:"updatedAt"`
 }
 
 func FromReviewView(v *queries.ReviewView) *ReviewResponse {
@@ -34,10 +34,10 @@ func FromReviewView(v *queries.ReviewView) *ReviewResponse {
 
 type ReviewListItemResponse struct {
 	ID        string `json:"id"`
-	UserEmail string `json:"user_email"`
+	UserEmail string `json:"userEmail"`
 	Rating    int32  `json:"rating"`
 	Comment   string `json:"comment"`
-	CreatedAt int64  `json:"created_at"`
+	CreatedAt int64  `json:"createdAt"`
 }
 
 func FromReviewList(items []*queries.ReviewListItem) []*ReviewListItemResponse {
@@ -55,15 +55,15 @@ func FromReviewList(items []*queries.ReviewListItem) []*ReviewListItemResponse {
 }
 
 type ResourceRatingStatsResponse struct {
-	ResourceID    string  `json:"resource_id"`
-	TotalReviews  int32   `json:"total_reviews"`
-	AverageRating float64 `json:"average_rating"`
-	Rating1Count  int32   `json:"rating_1_count"`
-	Rating2Count  int32   `json:"rating_2_count"`
-	Rating3Count  int32   `json:"rating_3_count"`
-	Rating4Count  int32   `json:"rating_4_count"`
-	Rating5Count  int32   `json:"rating_5_count"`
-	UpdatedAt     int64   `json:"updated_at"`
+	ResourceID    string  `json:"resourceId"`
+	TotalReviews  int32   `json:"totalReviews"`
+	AverageRating float64 `json:"averageRating"`
+	Rating1Count  int32   `json:"rating1Count"`
+	Rating2Count  int32   `json:"rating2Count"`
+	Rating3Count  int32   `json:"rating3Count"`
+	Rating4Count  int32   `json:"rating4Count"`
+	Rating5Count  int32   `json:"rating5Count"`
+	UpdatedAt     int64   `json:"updatedAt"`
 }
 
 func FromResourceRatingStats(s *queries.ResourceRatingStats) *ResourceRatingStatsResponse {

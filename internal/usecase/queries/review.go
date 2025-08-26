@@ -16,35 +16,35 @@ var (
 
 type ReviewView struct {
 	ID            uuid.UUID `json:"id"`
-	UserID        uuid.UUID `json:"user_id"`
-	UserEmail     string    `json:"user_email"`
-	ResourceID    uuid.UUID `json:"resource_id"`
-	ResourceName  string    `json:"resource_name"`
-	ReservationID uuid.UUID `json:"reservation_id"`
+	UserID        uuid.UUID `json:"userId"`
+	UserEmail     string    `json:"userEmail"`
+	ResourceID    uuid.UUID `json:"resourceId"`
+	ResourceName  string    `json:"resourceName"`
+	ReservationID uuid.UUID `json:"reservationId"`
 	Rating        int32     `json:"rating"`
 	Comment       string    `json:"comment"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	CreatedAt     time.Time `json:"createdAt"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type ReviewListItem struct {
 	ID        uuid.UUID `json:"id"`
-	UserEmail string    `json:"user_email"`
+	UserEmail string    `json:"userEmail"`
 	Rating    int32     `json:"rating"`
 	Comment   string    `json:"comment"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 type ResourceRatingStats struct {
-	ResourceID    uuid.UUID `json:"resource_id"`
-	TotalReviews  int32     `json:"total_reviews"`
-	AverageRating float64   `json:"average_rating"`
-	Rating1Count  int32     `json:"rating_1_count"`
-	Rating2Count  int32     `json:"rating_2_count"`
-	Rating3Count  int32     `json:"rating_3_count"`
-	Rating4Count  int32     `json:"rating_4_count"`
-	Rating5Count  int32     `json:"rating_5_count"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ResourceID    uuid.UUID `json:"resourceId"`
+	TotalReviews  int32     `json:"totalReviews"`
+	AverageRating float64   `json:"averageRating"`
+	Rating1Count  int32     `json:"rating1Count"`
+	Rating2Count  int32     `json:"rating2Count"`
+	Rating3Count  int32     `json:"rating3Count"`
+	Rating4Count  int32     `json:"rating4Count"`
+	Rating5Count  int32     `json:"rating5Count"`
+	UpdatedAt     time.Time `json:"updatedAt"`
 }
 
 type ReviewFilters struct {
