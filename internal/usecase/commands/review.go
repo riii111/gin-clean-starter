@@ -42,18 +42,20 @@ func NewReviewCommands(uow shared.UnitOfWork, clk clock.Clock) ReviewCommands {
 }
 
 func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error) {
-	rating, comment, err := req.ToDomain()
+	ratingValue, commentText, err := req.ToDomain()
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
 
-	// Check eligibility before creating review
 	if err = uc.canPostReview(ctx, userID, req.ResourceID, req.ReservationID); err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
 
 	now := uc.clock.Now()
-	rev := domreview.NewReview(userID, req.ResourceID, req.ReservationID, rating, comment, now)
+	rev, err := domreview.NewReview(userID, req.ResourceID, req.ReservationID, ratingValue, commentText, now)
+	if err != nil {
+		return nil, errs.Mark(err, ErrDomainValidationFailed)
+	}
 
 	var createdID uuid.UUID
 	err = uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
@@ -71,29 +73,35 @@ func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.Creat
 }
 
 func (uc *reviewCommandsImpl) UpdateReview(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
-	rating, comment, err := req.ToDomain()
+	reviewQueries := uc.getReviewQueries()
+	existing, err := reviewQueries.GetByID(ctx, reviewID)
+	if err != nil {
+		return errs.Mark(err, ErrReviewNotFoundWrite)
+	}
+
+	if existing.UserID != actorID {
+		return ErrReviewNotOwned
+	}
+
+	now := uc.clock.Now()
+	updatedReview, err := req.ToDomain(existing, now)
 	if err != nil {
 		return errs.Mark(err, ErrDomainValidationFailed)
 	}
 
 	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
-		snap, derr := tx.Reads().ReviewByID(ctx, reviewID)
-		if derr != nil {
-			return errs.Mark(derr, ErrReviewNotFoundWrite)
-		}
-		if snap.UserID != actorID {
-			return ErrReviewNotOwned
-		}
-
-		agg := domreview.ReconstructReview(snap.ID, snap.UserID, snap.ResourceID, snap.ReservationID, rating, comment, uc.clock.Now(), uc.clock.Now())
-		if derr = tx.Reviews().Update(ctx, tx.DB(), agg); derr != nil {
+		if derr := tx.Reviews().Update(ctx, tx.DB(), updatedReview); derr != nil {
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
-		if derr = tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), snap.ResourceID); derr != nil {
+		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), existing.ResourceID); derr != nil {
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
 		return nil
 	})
+}
+
+func (uc *reviewCommandsImpl) getReviewQueries() queries.ReviewQueries {
+	return nil
 }
 
 func (uc *reviewCommandsImpl) DeleteReview(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {

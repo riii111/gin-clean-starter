@@ -17,7 +17,17 @@ type Review struct {
 	updatedAt     time.Time
 }
 
-func NewReview(userID, resourceID, reservationID uuid.UUID, rating Rating, comment Comment, now time.Time) *Review {
+func NewReview(userID, resourceID, reservationID uuid.UUID, ratingValue int, commentText string, now time.Time) (*Review, error) {
+	rating, err := NewRating(ratingValue)
+	if err != nil {
+		return nil, err
+	}
+
+	comment, err := NewComment(commentText)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Review{
 		id:            uuid.New(),
 		userID:        userID,
@@ -27,25 +37,7 @@ func NewReview(userID, resourceID, reservationID uuid.UUID, rating Rating, comme
 		comment:       comment,
 		createdAt:     now,
 		updatedAt:     now,
-	}
-}
-
-func ReconstructReview(
-	id, userID, resourceID, reservationID uuid.UUID,
-	rating Rating,
-	comment Comment,
-	createdAt, updatedAt time.Time,
-) *Review {
-	return &Review{
-		id:            id,
-		userID:        userID,
-		resourceID:    resourceID,
-		reservationID: reservationID,
-		rating:        rating,
-		comment:       comment,
-		createdAt:     createdAt,
-		updatedAt:     updatedAt,
-	}
+	}, nil
 }
 
 func (r *Review) ID() uuid.UUID            { return r.id }
