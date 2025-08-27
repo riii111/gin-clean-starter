@@ -442,14 +442,14 @@ func TestReadStore_GetResourceRatingStats(t *testing.T) {
 // mockDBTX is a mock implementation of sqlc.DBTX interface
 type mockDBTX struct{}
 
-func (m *mockDBTX) Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error) {
+func (m *mockDBTX) Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
 
-func (m *mockDBTX) Query(ctx context.Context, sql string, args ...interface{}) (pgx.Rows, error) {
+func (m *mockDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
 	return nil, nil
 }
 
-func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...interface{}) pgx.Row {
+func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
 	return nil
 }
