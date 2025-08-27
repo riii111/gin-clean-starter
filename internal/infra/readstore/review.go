@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type ReviewViewQueries interface {
+type ReviewReadQueries interface {
 	GetReviewViewByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReviewViewByIDRow, error)
 	GetReviewsByResourceFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceFirstPageParams) ([]sqlc.GetReviewsByResourceFirstPageRow, error)
 	GetReviewsByResourceKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceKeysetParams) ([]sqlc.GetReviewsByResourceKeysetRow, error)
@@ -23,11 +23,11 @@ type ReviewViewQueries interface {
 }
 
 type ReviewReadStore struct {
-	queries ReviewViewQueries
+	queries ReviewReadQueries
 	db      sqlc.DBTX
 }
 
-func NewReviewReadStore(queries ReviewViewQueries, db sqlc.DBTX) *ReviewReadStore {
+func NewReviewReadStore(queries ReviewReadQueries, db sqlc.DBTX) *ReviewReadStore {
 	return &ReviewReadStore{
 		queries: queries,
 		db:      db,
