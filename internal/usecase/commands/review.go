@@ -27,9 +27,9 @@ type CreateReviewResult struct {
 }
 
 type ReviewCommands interface {
-	CreateReview(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error)
-	UpdateReview(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error
-	DeleteReview(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error
+	Create(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error)
+	Update(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error
+	Delete(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error
 }
 
 type reviewCommandsImpl struct {
@@ -41,7 +41,7 @@ func NewReviewCommands(uow shared.UnitOfWork, clk clock.Clock) ReviewCommands {
 	return &reviewCommandsImpl{uow: uow, clock: clk}
 }
 
-func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error) {
+func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error) {
 	if err := uc.canPostReview(ctx, userID, req.ResourceID, req.ReservationID); err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
@@ -67,7 +67,7 @@ func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.Creat
 	return &CreateReviewResult{ReviewID: createdID}, nil
 }
 
-func (uc *reviewCommandsImpl) UpdateReview(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
+func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
 	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		existing, err := tx.Reads().ReviewByID(ctx, reviewID)
 		if err != nil {
@@ -94,7 +94,7 @@ func (uc *reviewCommandsImpl) UpdateReview(ctx context.Context, reviewID uuid.UU
 	})
 }
 
-func (uc *reviewCommandsImpl) DeleteReview(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {
+func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {
 	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		snap, derr := tx.Reads().ReviewByID(ctx, reviewID)
 		if derr != nil {
