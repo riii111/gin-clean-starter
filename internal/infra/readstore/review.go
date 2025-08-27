@@ -27,7 +27,7 @@ type ReviewReadStore struct {
 	db      sqlc.DBTX
 }
 
-func NewReviewReadStore(queries *sqlc.Queries, db sqlc.DBTX) *ReviewReadStore {
+func NewReviewReadStore(queries ReviewViewQueries, db sqlc.DBTX) *ReviewReadStore {
 	return &ReviewReadStore{
 		queries: queries,
 		db:      db,
