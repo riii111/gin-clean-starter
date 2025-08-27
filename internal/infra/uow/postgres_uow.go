@@ -367,6 +367,8 @@ func (r *commandReads) ReviewByID(ctx context.Context, id uuid.UUID) (*shared.Re
 		UserID:        rv.UserID,
 		ResourceID:    rv.ResourceID,
 		ReservationID: rv.ReservationID,
+		Rating:        int(rv.Rating),
+		Comment:       rv.Comment,
 	}
 	return snap, nil
 }

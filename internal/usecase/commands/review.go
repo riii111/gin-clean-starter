@@ -42,17 +42,12 @@ func NewReviewCommands(uow shared.UnitOfWork, clk clock.Clock) ReviewCommands {
 }
 
 func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error) {
-	ratingValue, commentText, err := req.ToDomain()
-	if err != nil {
-		return nil, errs.Mark(err, ErrDomainValidationFailed)
-	}
-
-	if err = uc.canPostReview(ctx, userID, req.ResourceID, req.ReservationID); err != nil {
+	if err := uc.canPostReview(ctx, userID, req.ResourceID, req.ReservationID); err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
 
 	now := uc.clock.Now()
-	rev, err := domreview.NewReview(userID, req.ResourceID, req.ReservationID, ratingValue, commentText, now)
+	rev, err := req.ToDomain(userID, now)
 	if err != nil {
 		return nil, errs.Mark(err, ErrDomainValidationFailed)
 	}
@@ -73,23 +68,22 @@ func (uc *reviewCommandsImpl) CreateReview(ctx context.Context, req reqdto.Creat
 }
 
 func (uc *reviewCommandsImpl) UpdateReview(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
-	reviewQueries := uc.getReviewQueries()
-	existing, err := reviewQueries.GetByID(ctx, reviewID)
-	if err != nil {
-		return errs.Mark(err, ErrReviewNotFoundWrite)
-	}
-
-	if existing.UserID != actorID {
-		return ErrReviewNotOwned
-	}
-
-	now := uc.clock.Now()
-	updatedReview, err := req.ToDomain(existing, now)
-	if err != nil {
-		return errs.Mark(err, ErrDomainValidationFailed)
-	}
-
 	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
+		existing, err := tx.Reads().ReviewByID(ctx, reviewID)
+		if err != nil {
+			return errs.Mark(err, ErrReviewNotFoundWrite)
+		}
+
+		if existing.UserID != actorID {
+			return ErrReviewNotOwned
+		}
+
+		now := uc.clock.Now()
+		updatedReview, err := req.ToDomain(existing, now)
+		if err != nil {
+			return errs.Mark(err, ErrDomainValidationFailed)
+		}
+
 		if derr := tx.Reviews().Update(ctx, tx.DB(), updatedReview); derr != nil {
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
@@ -98,10 +92,6 @@ func (uc *reviewCommandsImpl) UpdateReview(ctx context.Context, reviewID uuid.UU
 		}
 		return nil
 	})
-}
-
-func (uc *reviewCommandsImpl) getReviewQueries() queries.ReviewQueries {
-	return nil
 }
 
 func (uc *reviewCommandsImpl) DeleteReview(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {

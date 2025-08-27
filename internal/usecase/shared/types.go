@@ -35,4 +35,6 @@ type ReviewSnapshot struct {
 	UserID        uuid.UUID
 	ResourceID    uuid.UUID
 	ReservationID uuid.UUID
+	Rating        int
+	Comment       string
 }
