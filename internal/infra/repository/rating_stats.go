@@ -3,20 +3,31 @@ package repository
 import (
 	"context"
 
+	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 
 	"github.com/google/uuid"
 )
 
-type RatingStatsRepository struct {
-	q  *sqlc.Queries
-	db sqlc.DBTX
+type RatingStatsQueries interface {
+	RecalcResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) error
 }
 
-func NewRatingStatsRepository(q *sqlc.Queries, db sqlc.DBTX) *RatingStatsRepository {
-	return &RatingStatsRepository{q: q, db: db}
+type RatingStatsRepository struct {
+	queries RatingStatsQueries
+	db      sqlc.DBTX
+}
+
+func NewRatingStatsRepository(queries RatingStatsQueries, db sqlc.DBTX) *RatingStatsRepository {
+	return &RatingStatsRepository{
+		queries: queries,
+		db:      db,
+	}
 }
 
 func (r *RatingStatsRepository) RecalcResourceRatingStats(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID) error {
-	return r.q.RecalcResourceRatingStats(ctx, tx, resourceID)
+	if err := r.queries.RecalcResourceRatingStats(ctx, tx, resourceID); err != nil {
+		return infra.WrapRepoErr("failed to recalculate resource rating stats", err)
+	}
+	return nil
 }

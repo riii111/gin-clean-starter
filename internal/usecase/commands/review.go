@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	ErrReviewNotOwned         = errs.New("review not owned by user")
-	ErrReviewNotFoundWrite    = errs.New("review not found")
-	ErrReviewCreationFailed   = errs.New("review creation failed")
-	ErrReviewUpdateFailed     = errs.New("review update failed")
-	ErrReviewDeletionFailed   = errs.New("review deletion failed")
-	ErrDomainValidationFailed = errs.New("domain validation failed")
+	ErrReviewNotOwned          = errs.New("review not owned by user")
+	ErrReviewNotFoundWrite     = errs.New("review not found")
+	ErrReviewCreationFailed    = errs.New("review creation failed")
+	ErrReviewUpdateFailed      = errs.New("review update failed")
+	ErrReviewDeletionFailed    = errs.New("review deletion failed")
+	ErrDomainValidationFailed  = errs.New("domain validation failed")
+	ErrRatingStatsRecalcFailed = errs.New("rating stats recalculation failed")
 )
 
 type CreateReviewResult struct {
@@ -59,7 +60,10 @@ func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateRevie
 			return derr
 		}
 		createdID = id
-		return tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), req.ResourceID)
+		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), req.ResourceID); derr != nil {
+			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, errs.Mark(err, ErrReviewCreationFailed)
@@ -88,7 +92,7 @@ func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, re
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
 		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), existing.ResourceID); derr != nil {
-			return errs.Mark(derr, ErrReviewUpdateFailed)
+			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
 		}
 		return nil
 	})
@@ -107,7 +111,7 @@ func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, ac
 			return errs.Mark(derr, ErrReviewDeletionFailed)
 		}
 		if derr = tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), snap.ResourceID); derr != nil {
-			return errs.Mark(derr, ErrReviewDeletionFailed)
+			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
 		}
 		return nil
 	})
