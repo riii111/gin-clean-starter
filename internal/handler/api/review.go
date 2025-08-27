@@ -9,11 +9,16 @@ import (
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
+	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+)
+
+var (
+	ErrUserNotAuthenticated = errs.New("user not authenticated")
 )
 
 type ReviewHandler struct {
@@ -40,7 +45,7 @@ func NewReviewHandler(cmds commands.ReviewCommands, q queries.ReviewQueries) *Re
 func (h *ReviewHandler) Create(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
-		httperr.AbortWithError(c, http.StatusUnauthorized, nil, "Unauthorized", nil)
+		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	var req reqdto.CreateReviewRequest
@@ -106,7 +111,7 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 	}
 	actorID, ok := middleware.GetUserID(c)
 	if !ok {
-		httperr.AbortWithError(c, http.StatusUnauthorized, nil, "Unauthorized", nil)
+		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	var req reqdto.UpdateReviewRequest
@@ -145,7 +150,7 @@ func (h *ReviewHandler) Delete(c *gin.Context) {
 	}
 	actorID, ok := middleware.GetUserID(c)
 	if !ok {
-		httperr.AbortWithError(c, http.StatusUnauthorized, nil, "Unauthorized", nil)
+		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	role, _ := middleware.GetUserRole(c)
