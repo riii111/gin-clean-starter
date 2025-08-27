@@ -21,6 +21,8 @@ var (
 	ErrReviewDeletionFailed    = errs.New("review deletion failed")
 	ErrDomainValidationFailed  = errs.New("domain validation failed")
 	ErrRatingStatsRecalcFailed = errs.New("rating stats recalculation failed")
+	ErrReservationCheckFailed  = errs.New("reservation check failed")
+	ErrTransactionFailed       = errs.New("transaction failed")
 )
 
 type CreateReviewResult struct {
@@ -57,7 +59,7 @@ func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateRevie
 	err = uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		id, derr := tx.Reviews().Create(ctx, tx.DB(), rev)
 		if derr != nil {
-			return derr
+			return errs.Mark(derr, ErrReviewCreationFailed)
 		}
 		createdID = id
 		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), req.ResourceID); derr != nil {
@@ -66,13 +68,13 @@ func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateRevie
 		return nil
 	})
 	if err != nil {
-		return nil, errs.Mark(err, ErrReviewCreationFailed)
+		return nil, errs.Mark(err, ErrTransactionFailed)
 	}
 	return &CreateReviewResult{ReviewID: createdID}, nil
 }
 
 func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
-	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
+	err := uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		existing, err := tx.Reads().ReviewByID(ctx, reviewID)
 		if err != nil {
 			return errs.Mark(err, ErrReviewNotFoundWrite)
@@ -96,10 +98,14 @@ func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, re
 		}
 		return nil
 	})
+	if err != nil {
+		return errs.Mark(err, ErrTransactionFailed)
+	}
+	return nil
 }
 
 func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {
-	return uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
+	err := uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
 		snap, derr := tx.Reads().ReviewByID(ctx, reviewID)
 		if derr != nil {
 			return errs.Mark(derr, ErrReviewNotFoundWrite)
@@ -115,12 +121,16 @@ func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, ac
 		}
 		return nil
 	})
+	if err != nil {
+		return errs.Mark(err, ErrTransactionFailed)
+	}
+	return nil
 }
 
 func (uc *reviewCommandsImpl) canPostReview(ctx context.Context, userID, resourceID, reservationID uuid.UUID) error {
 	resSnap, err := uc.uow.CommandReads().ReservationByID(ctx, reservationID)
 	if err != nil {
-		return err
+		return errs.Mark(err, ErrReservationCheckFailed)
 	}
 	if resSnap.UserID != userID || resSnap.ResourceID != resourceID {
 		return domreview.ErrReservationNotEligible
