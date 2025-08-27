@@ -16,6 +16,8 @@ generated_count=0
 mkdir -p tests/mock/usecase
 mkdir -p tests/mock/commands
 mkdir -p tests/mock/queries
+mkdir -p tests/mock/repository
+mkdir -p tests/mock/readstore
 
 # Function to generate mock for a specific file
 generate_mock() {
@@ -51,6 +53,17 @@ done
 # Queries  
 for file in internal/usecase/queries/*.go; do
     generate_mock "$file" "tests/mock/queries" "queriesmock"
+done
+
+# Repository (infrastructure layer)
+echo "Generating mocks for repository layer..."
+for file in internal/infra/repository/*.go; do
+    generate_mock "$file" "tests/mock/repository" "repositorymock"
+done
+
+# ReadStore (infrastructure layer)
+for file in internal/infra/readstore/*.go; do
+    generate_mock "$file" "tests/mock/readstore" "readstoremock"
 done
 
 if [ $generated_count -eq 0 ]; then
