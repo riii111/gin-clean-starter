@@ -122,3 +122,33 @@ func ResetDB(pool *pgxpool.Pool) error {
 
 	return SeedReferenceData(pool)
 }
+
+func CreateTestResource(t *testing.T, db DBLike, name string, leadTimeMin int) uuid.UUID {
+	t.Helper()
+
+	resourceID := uuid.New()
+	ctx := context.Background()
+
+	_, err := db.Exec(ctx, "INSERT INTO resources (id, name, lead_time_min) VALUES ($1, $2, $3)",
+		resourceID, name, leadTimeMin)
+	require.NoError(t, err)
+
+	return resourceID
+}
+
+func CreateTestReservation(t *testing.T, db DBLike, resourceID, userID uuid.UUID, startTime, endTime time.Time, status string) uuid.UUID {
+	t.Helper()
+
+	reservationID := uuid.New()
+	ctx := context.Background()
+
+	if status == "" {
+		status = "confirmed"
+	}
+
+	_, err := db.Exec(ctx, "INSERT INTO reservations (id, resource_id, user_id, slot, status, price_cents) VALUES ($1, $2, $3, tstzrange($4, $5, '[)'), $6, $7)",
+		reservationID, resourceID, userID, startTime, endTime, status, 10000)
+	require.NoError(t, err)
+
+	return reservationID
+}
