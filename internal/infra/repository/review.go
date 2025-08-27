@@ -23,7 +23,7 @@ type ReviewRepository struct {
 	db      sqlc.DBTX
 }
 
-func NewReviewRepository(queries *sqlc.Queries, db sqlc.DBTX) *ReviewRepository {
+func NewReviewRepository(queries ReviewWriteQueries, db sqlc.DBTX) *ReviewRepository {
 	return &ReviewRepository{
 		queries: queries,
 		db:      db,
