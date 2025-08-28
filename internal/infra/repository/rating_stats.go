@@ -10,7 +10,6 @@ import (
 )
 
 type RatingStatsQueries interface {
-	RecalcResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) error
 	ApplyResourceRatingStatsOnCreate(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnCreateParams) error
 	ApplyResourceRatingStatsOnUpdate(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnUpdateParams) error
 	ApplyResourceRatingStatsOnDelete(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnDeleteParams) error
@@ -26,13 +25,6 @@ func NewRatingStatsRepository(queries RatingStatsQueries, db sqlc.DBTX) *RatingS
 		queries: queries,
 		db:      db,
 	}
-}
-
-func (r *RatingStatsRepository) RecalcResourceRatingStats(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID) error {
-	if err := r.queries.RecalcResourceRatingStats(ctx, tx, resourceID); err != nil {
-		return infra.WrapRepoErr("failed to recalculate resource rating stats", err)
-	}
-	return nil
 }
 
 func (r *RatingStatsRepository) ApplyOnCreate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, rating int) error {

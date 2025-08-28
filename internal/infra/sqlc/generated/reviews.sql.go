@@ -496,46 +496,6 @@ func (q *Queries) GetReviewsByUserKeyset(ctx context.Context, db DBTX, arg GetRe
 	return items, nil
 }
 
-const recalcResourceRatingStats = `-- name: RecalcResourceRatingStats :exec
-INSERT INTO resource_rating_stats (
-  resource_id,
-  total_reviews,
-  average_rating,
-  rating_1_count,
-  rating_2_count,
-  rating_3_count,
-  rating_4_count,
-  rating_5_count,
-  updated_at
-)
-SELECT
-  $1 AS resource_id,
-  COALESCE(COUNT(*), 0) AS total_reviews,
-  COALESCE(ROUND(AVG(rating)::numeric, 2), 0.00) AS average_rating,
-  COALESCE(SUM(CASE WHEN rating = 1 THEN 1 ELSE 0 END), 0) AS rating_1_count,
-  COALESCE(SUM(CASE WHEN rating = 2 THEN 1 ELSE 0 END), 0) AS rating_2_count,
-  COALESCE(SUM(CASE WHEN rating = 3 THEN 1 ELSE 0 END), 0) AS rating_3_count,
-  COALESCE(SUM(CASE WHEN rating = 4 THEN 1 ELSE 0 END), 0) AS rating_4_count,
-  COALESCE(SUM(CASE WHEN rating = 5 THEN 1 ELSE 0 END), 0) AS rating_5_count,
-  NOW() AS updated_at
-FROM reviews
-WHERE resource_id = $1
-ON CONFLICT (resource_id) DO UPDATE SET
-  total_reviews = EXCLUDED.total_reviews,
-  average_rating = EXCLUDED.average_rating,
-  rating_1_count = EXCLUDED.rating_1_count,
-  rating_2_count = EXCLUDED.rating_2_count,
-  rating_3_count = EXCLUDED.rating_3_count,
-  rating_4_count = EXCLUDED.rating_4_count,
-  rating_5_count = EXCLUDED.rating_5_count,
-  updated_at = NOW()
-`
-
-func (q *Queries) RecalcResourceRatingStats(ctx context.Context, db DBTX, resourceID uuid.UUID) error {
-	_, err := db.Exec(ctx, recalcResourceRatingStats, resourceID)
-	return err
-}
-
 const updateReview = `-- name: UpdateReview :exec
 UPDATE reviews
 SET

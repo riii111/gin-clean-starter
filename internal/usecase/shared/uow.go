@@ -61,7 +61,6 @@ type ReviewRepository interface {
 }
 
 type RatingStatsRepository interface {
-	RecalcResourceRatingStats(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID) error
 	ApplyOnCreate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, rating int) error
 	ApplyOnUpdate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating, newRating int) error
 	ApplyOnDelete(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating int) error
