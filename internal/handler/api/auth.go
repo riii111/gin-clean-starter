@@ -39,8 +39,8 @@ func NewAuthHandler(authCommands commands.AuthCommands, userQueries queries.User
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body reqdto.LoginRequest true "Login request"
-// @Success 200 {object} resdto.LoginResponse
+// @Param request body request.LoginRequest true "Login request"
+// @Success 200 {object} response.LoginResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Router /auth/login [post]
@@ -148,7 +148,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 // @Description Refresh access token using refresh token from cookie
 // @Tags auth
 // @Produce json
-// @Success 200 {object} gin.H
+// @Success 200 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Router /auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {

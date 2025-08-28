@@ -44,8 +44,8 @@ func NewReservationHandler(reservationCommands commands.ReservationCommands, res
 // @Produce json
 // @Security BearerAuth
 // @Param Idempotency-Key header string true "Idempotency key for duplicate prevention"
-// @Param request body reqdto.CreateReservationRequest true "Reservation request"
-// @Success 201 {object} resdto.ReservationResponse
+// @Param request body request.CreateReservationRequest true "Reservation request"
+// @Success 201 {object} response.ReservationResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -108,7 +108,7 @@ func (h *ReservationHandler) CreateReservation(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "Reservation ID"
-// @Success 200 {object} resdto.ReservationResponse
+// @Success 200 {object} response.ReservationResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -164,7 +164,7 @@ func (h *ReservationHandler) GetReservation(c *gin.Context) {
 // @Tags reservations
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {array} resdto.ReservationListResponse
+// @Success 200 {array} response.ReservationListResponse
 // @Failure 401 {object} map[string]string
 // @Router /reservations [get]
 func (h *ReservationHandler) GetUserReservations(c *gin.Context) {

@@ -36,8 +36,8 @@ func NewReviewHandler(cmds commands.ReviewCommands, q queries.ReviewQueries) *Re
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param request body reqdto.CreateReviewRequest true "Create review request"
-// @Success 201 {object} resdto.ReviewResponse
+// @Param request body request.CreateReviewRequest true "Create review request"
+// @Success 201 {object} response.ReviewResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -71,7 +71,7 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 // @Tags reviews
 // @Produce json
 // @Param id path string true "Review ID"
-// @Success 200 {object} resdto.ReviewResponse
+// @Success 200 {object} response.ReviewResponse
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Router /reviews/{id} [get]
@@ -96,8 +96,8 @@ func (h *ReviewHandler) Get(c *gin.Context) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "Review ID"
-// @Param request body reqdto.UpdateReviewRequest true "Update review request"
-// @Success 200 {object} resdto.ReviewResponse
+// @Param request body request.UpdateReviewRequest true "Update review request"
+// @Success 200 {object} response.ReviewResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
@@ -170,7 +170,7 @@ func (h *ReviewHandler) Delete(c *gin.Context) {
 // @Param max_rating query int false "Maximum rating (1-5)"
 // @Param limit query int false "Max items (default 20)"
 // @Param after query string false "Cursor for keyset pagination"
-// @Success 200 {array} resdto.ReviewListItemResponse
+// @Success 200 {array} response.ReviewListItemResponse
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /resources/{id}/reviews [get]
@@ -222,7 +222,7 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 // @Param id path string true "User ID"
 // @Param limit query int false "Max items (default 20)"
 // @Param after query string false "Cursor for keyset pagination"
-// @Success 200 {array} resdto.ReviewListItemResponse
+// @Success 200 {array} response.ReviewListItemResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
@@ -262,7 +262,7 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 // @Tags reviews
 // @Produce json
 // @Param id path string true "Resource ID"
-// @Success 200 {object} resdto.ResourceRatingStatsResponse
+// @Success 200 {object} response.ResourceRatingStatsResponse
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /resources/{id}/rating-stats [get]
