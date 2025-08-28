@@ -73,10 +73,21 @@ func (s *ReviewSuite) TestCreateReview() {
 		w := httptest.PerformRequest(t, s.Router, http.MethodPost, url, reqBody, token)
 		require.Equal(t, http.StatusCreated, w.Code, "Should create review successfully")
 
-		var actualRes response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, w.Body, &actualRes)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, w.Body, &created)
 		require.NoError(t, err)
-		require.NotEmpty(t, actualRes.ID, "Review ID should not be empty")
+		id := created["id"]
+		require.NotEmpty(t, id, "Review ID should not be empty")
+		// Location header format may vary by router prefix; only assert body id
+
+		// Fetch detail and assert
+		detailURL := reviewsURL + "/" + id
+		dw := httptest.PerformRequest(t, s.Router, http.MethodGet, detailURL, nil, "")
+		require.Equal(t, http.StatusOK, dw.Code)
+
+		var actualRes response.ReviewResponse
+		err = httptest.DecodeResponseBody(t, dw.Body, &actualRes)
+		require.NoError(t, err)
 
 		expected := &response.ReviewResponse{
 			UserEmail:    "reviewer@example.com",
@@ -120,7 +131,7 @@ func (s *ReviewSuite) TestCreateReview() {
 		// Second review attempt with same reservation
 		reqBody.Comment = "Second review attempt"
 		w2 := httptest.PerformRequest(t, s.Router, http.MethodPost, url, reqBody, token)
-		require.Equal(t, http.StatusBadRequest, w2.Code, "Should prevent duplicate reviews for same reservation")
+		require.Equal(t, http.StatusConflict, w2.Code, "Should prevent duplicate reviews for same reservation")
 	})
 
 	s.Run("Auth test - Unauthorized when not logged in", func() {
@@ -173,19 +184,21 @@ func (s *ReviewSuite) TestGetReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Get the review
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
 		require.Equal(t, http.StatusOK, w.Code, "Should retrieve review successfully")
 
 		var actualRes response.ReviewResponse
 		err = httptest.DecodeResponseBody(t, w.Body, &actualRes)
 		require.NoError(t, err)
-		require.Equal(t, createdReview.ID, actualRes.ID)
+		require.Equal(t, id, actualRes.ID)
 
 		expected := &response.ReviewResponse{
 			Rating:  int32(4),
@@ -196,7 +209,7 @@ func (s *ReviewSuite) TestGetReview() {
 			cmpopts.IgnoreFields(response.ReviewResponse{}, "UserID", "UserEmail", "ResourceID", "ResourceName", "ReservationID", "CreatedAt", "UpdatedAt"),
 		}
 
-		expected.ID = createdReview.ID
+		expected.ID = id
 
 		if diff := cmp.Diff(expected, &actualRes, opts...); diff != "" {
 			t.Errorf("Review response mismatch (-want +got):\n%s", diff)
@@ -241,9 +254,11 @@ func (s *ReviewSuite) TestUpdateReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Update the review
 		rating := 5
@@ -253,14 +268,14 @@ func (s *ReviewSuite) TestUpdateReview() {
 			Comment: &comment,
 		}
 
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodPut, url, updateReq, token)
 		require.Equal(t, http.StatusOK, w.Code, "Should update review successfully")
 
 		var updatedReview response.ReviewResponse
 		err = httptest.DecodeResponseBody(t, w.Body, &updatedReview)
 		require.NoError(t, err)
-		require.Equal(t, createdReview.ID, updatedReview.ID)
+		require.Equal(t, id, updatedReview.ID)
 		require.Equal(t, int32(5), updatedReview.Rating)
 		require.Equal(t, "Excellent updated service!", updatedReview.Comment)
 	})
@@ -288,9 +303,11 @@ func (s *ReviewSuite) TestUpdateReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Update only rating
 		rating := 4
@@ -298,14 +315,14 @@ func (s *ReviewSuite) TestUpdateReview() {
 			Rating: &rating,
 		}
 
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodPut, url, updateReq, token)
 		require.Equal(t, http.StatusOK, w.Code, "Should update rating only")
 
 		var updatedReview response.ReviewResponse
 		err = httptest.DecodeResponseBody(t, w.Body, &updatedReview)
 		require.NoError(t, err)
-		require.Equal(t, createdReview.ID, updatedReview.ID)
+		require.Equal(t, id, updatedReview.ID)
 		require.Equal(t, int32(4), updatedReview.Rating)
 		require.Equal(t, "Average service", updatedReview.Comment) // Comment unchanged
 	})
@@ -333,9 +350,11 @@ func (s *ReviewSuite) TestUpdateReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Try to update without authentication
 		rating := 5
@@ -343,7 +362,7 @@ func (s *ReviewSuite) TestUpdateReview() {
 			Rating: &rating,
 		}
 
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodPut, url, updateReq, "")
 		require.Equal(t, http.StatusUnauthorized, w.Code, "Should reject unauthorized access")
 	})
@@ -377,12 +396,14 @@ func (s *ReviewSuite) TestDeleteReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Delete the review
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodDelete, url, nil, token)
 		require.Equal(t, http.StatusNoContent, w.Code, "Should delete review successfully")
 
@@ -414,15 +435,17 @@ func (s *ReviewSuite) TestDeleteReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, regularToken)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Admin tries to delete the regular user's review
 		dbtest.CreateTestUser(t, s.DB, "admin@example.com", string(user.RoleAdmin))
 		adminToken := authtest.LoginUser(t, s.Router, "admin@example.com", "password123")
 
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodDelete, url, nil, adminToken)
 		require.Equal(t, http.StatusNoContent, w.Code, "Admin should be able to delete any review")
 	})
@@ -450,12 +473,14 @@ func (s *ReviewSuite) TestDeleteReview() {
 		createResp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, createReq, token)
 		require.Equal(t, http.StatusCreated, createResp.Code)
 
-		var createdReview response.ReviewResponse
-		err := httptest.DecodeResponseBody(t, createResp.Body, &createdReview)
+		var created map[string]string
+		err := httptest.DecodeResponseBody(t, createResp.Body, &created)
 		require.NoError(t, err)
+		id := created["id"]
+		require.NotEmpty(t, id)
 
 		// Try to delete without authentication
-		url := reviewsURL + "/" + createdReview.ID
+		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodDelete, url, nil, "")
 		require.Equal(t, http.StatusUnauthorized, w.Code, "Should reject unauthorized access")
 	})

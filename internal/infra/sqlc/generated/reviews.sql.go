@@ -64,11 +64,11 @@ SET
     WHEN total_reviews - 1 <= 0 THEN 0.00
     ELSE ROUND(((average_rating * total_reviews) - ($1::int)::numeric) / (total_reviews - 1), 2)
   END,
-  rating_1_count = rating_1_count - (CASE WHEN $1::int = 1 THEN 1 ELSE 0 END),
-  rating_2_count = rating_2_count - (CASE WHEN $1::int = 2 THEN 1 ELSE 0 END),
-  rating_3_count = rating_3_count - (CASE WHEN $1::int = 3 THEN 1 ELSE 0 END),
-  rating_4_count = rating_4_count - (CASE WHEN $1::int = 4 THEN 1 ELSE 0 END),
-  rating_5_count = rating_5_count - (CASE WHEN $1::int = 5 THEN 1 ELSE 0 END),
+  rating_1_count = GREATEST(rating_1_count - (CASE WHEN $1::int = 1 THEN 1 ELSE 0 END), 0),
+  rating_2_count = GREATEST(rating_2_count - (CASE WHEN $1::int = 2 THEN 1 ELSE 0 END), 0),
+  rating_3_count = GREATEST(rating_3_count - (CASE WHEN $1::int = 3 THEN 1 ELSE 0 END), 0),
+  rating_4_count = GREATEST(rating_4_count - (CASE WHEN $1::int = 4 THEN 1 ELSE 0 END), 0),
+  rating_5_count = GREATEST(rating_5_count - (CASE WHEN $1::int = 5 THEN 1 ELSE 0 END), 0),
   updated_at = NOW()
 WHERE resource_id = $2::uuid
 `
@@ -86,7 +86,10 @@ func (q *Queries) ApplyResourceRatingStatsOnDelete(ctx context.Context, db DBTX,
 const applyResourceRatingStatsOnUpdate = `-- name: ApplyResourceRatingStatsOnUpdate :exec
 UPDATE resource_rating_stats
 SET
-  average_rating = ROUND(((average_rating * total_reviews) - ($1::int)::numeric + ($2::int)::numeric) / NULLIF(total_reviews, 0), 2),
+  average_rating = CASE
+    WHEN total_reviews = 0 THEN 0.00
+    ELSE ROUND(((average_rating * total_reviews) - ($1::int)::numeric + ($2::int)::numeric) / total_reviews, 2)
+  END,
   rating_1_count = rating_1_count + (CASE WHEN $2::int = 1 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 1 THEN 1 ELSE 0 END),
   rating_2_count = rating_2_count + (CASE WHEN $2::int = 2 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 2 THEN 1 ELSE 0 END),
   rating_3_count = rating_3_count + (CASE WHEN $2::int = 3 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 3 THEN 1 ELSE 0 END),
