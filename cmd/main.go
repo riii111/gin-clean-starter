@@ -23,12 +23,11 @@ func init() {
 
 // @title           Gin Clean Starter
 // @version         1.0
-// @description     A clean and simple starter for Gin
+// @description     JWT Authorization header using the Bearer scheme
 // @BasePath  /
 // @schemes http https
 // @in header      Authorization
 // @name          Authorization
-// @description   JWT Authorization header using the Bearer scheme
 func startServer(lc fx.Lifecycle, engine *gin.Engine, cfg config.Config, logger *slog.Logger) {
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {

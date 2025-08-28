@@ -45,24 +45,29 @@ func NewReviewHandler(cmds commands.ReviewCommands, q queries.ReviewQueries) *Re
 func (h *ReviewHandler) Create(c *gin.Context) {
 	userID, ok := middleware.GetUserID(c)
 	if !ok {
+		slog.Warn("User not authenticated in create review")
 		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	var req reqdto.CreateReviewRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Warn("Invalid request format in create review", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
 		return
 	}
 	result, err := h.cmds.Create(c.Request.Context(), req, userID)
 	if err != nil {
+		slog.Warn("Create review command failed", "user_id", userID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Create review failed", nil)
 		return
 	}
 	view, err := h.q.GetByID(c.Request.Context(), result.ReviewID)
 	if err != nil {
+		slog.Error("Failed to retrieve created review", "review_id", result.ReviewID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to load review", nil)
 		return
 	}
+	slog.Info("Review created successfully", "review_id", result.ReviewID, "user_id", userID)
 	c.JSON(http.StatusCreated, resdto.FromReviewView(view))
 }
 
@@ -78,11 +83,13 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 func (h *ReviewHandler) Get(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid review ID format in get", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
 		return
 	}
 	view, err := h.q.GetByID(c.Request.Context(), id)
 	if err != nil {
+		slog.Warn("Review not found", "review_id", id, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
 		return
 	}
@@ -106,28 +113,34 @@ func (h *ReviewHandler) Get(c *gin.Context) {
 func (h *ReviewHandler) Update(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid review ID format in update", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
 		return
 	}
 	actorID, ok := middleware.GetUserID(c)
 	if !ok {
+		slog.Warn("User not authenticated in update review")
 		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	var req reqdto.UpdateReviewRequest
 	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+		slog.Warn("Invalid request format in update review", "error", bindErr.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, "Invalid request", nil)
 		return
 	}
 	if err = h.cmds.Update(c.Request.Context(), id, req, actorID); err != nil {
+		slog.Warn("Update review command failed", "review_id", id, "actor_id", actorID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Update failed", nil)
 		return
 	}
 	view, err := h.q.GetByID(c.Request.Context(), id)
 	if err != nil {
+		slog.Error("Failed to retrieve updated review", "review_id", id, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to load review", nil)
 		return
 	}
+	slog.Info("Review updated successfully", "review_id", id, "actor_id", actorID)
 	c.JSON(http.StatusOK, resdto.FromReviewView(view))
 }
 
@@ -145,19 +158,23 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 func (h *ReviewHandler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid review ID format in delete", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
 		return
 	}
 	actorID, ok := middleware.GetUserID(c)
 	if !ok {
+		slog.Warn("User not authenticated in delete review")
 		httperr.AbortWithError(c, http.StatusUnauthorized, ErrUserNotAuthenticated, "Unauthorized", nil)
 		return
 	}
 	role, _ := middleware.GetUserRole(c)
 	if err := h.cmds.Delete(c.Request.Context(), id, actorID, string(role)); err != nil {
+		slog.Warn("Delete review command failed", "review_id", id, "actor_id", actorID, "role", string(role), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Delete failed", nil)
 		return
 	}
+	slog.Info("Review deleted successfully", "review_id", id, "actor_id", actorID)
 	c.Status(http.StatusNoContent)
 }
 
@@ -177,6 +194,7 @@ func (h *ReviewHandler) Delete(c *gin.Context) {
 func (h *ReviewHandler) ListByResource(c *gin.Context) {
 	resourceID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid resource ID format in list reviews", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid resource id", nil)
 		return
 	}
@@ -230,6 +248,7 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 func (h *ReviewHandler) ListByUser(c *gin.Context) {
 	userID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid user ID format in list user reviews", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid user id", nil)
 		return
 	}
@@ -247,6 +266,7 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 	}
 	items, next, err := h.q.ListByUser(c.Request.Context(), userID, actorID, string(role), cursor, limit)
 	if err != nil {
+		slog.Warn("Access denied in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusForbidden, err, "Access denied", nil)
 		return
 	}
@@ -269,11 +289,13 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 func (h *ReviewHandler) ResourceRatingStats(c *gin.Context) {
 	resourceID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
+		slog.Warn("Invalid resource ID format in get rating stats", "id", c.Param("id"), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid resource id", nil)
 		return
 	}
 	stats, err := h.q.GetResourceRatingStats(c.Request.Context(), resourceID)
 	if err != nil {
+		slog.Error("Failed to get resource rating stats", "resource_id", resourceID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to get stats", nil)
 		return
 	}
