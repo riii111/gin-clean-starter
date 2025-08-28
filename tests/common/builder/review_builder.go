@@ -49,7 +49,7 @@ func (r *ReviewBuilder) With(mutate func(*ReviewBuilder)) *ReviewBuilder {
 
 // Build methods
 func (r *ReviewBuilder) BuildDomain() (*domreview.Review, error) {
-	return domreview.NewReview(r.UserID, r.ResourceID, r.ReservationID, r.Rating, r.Comment, r.CreatedAt)
+	return domreview.NewReview(uuid.Nil, r.UserID, r.ResourceID, r.ReservationID, r.Rating, r.Comment, r.CreatedAt)
 }
 
 func (r *ReviewBuilder) BuildInfra() sqlc.Reviews {

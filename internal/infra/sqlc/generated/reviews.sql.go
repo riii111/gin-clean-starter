@@ -12,19 +12,116 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const applyResourceRatingStatsOnCreate = `-- name: ApplyResourceRatingStatsOnCreate :exec
+INSERT INTO resource_rating_stats (
+  resource_id,
+  total_reviews,
+  average_rating,
+  rating_1_count,
+  rating_2_count,
+  rating_3_count,
+  rating_4_count,
+  rating_5_count,
+  updated_at
+)
+VALUES (
+  $1::uuid,
+  1,
+  ($2::int)::numeric,
+  (CASE WHEN $2::int = 1 THEN 1 ELSE 0 END),
+  (CASE WHEN $2::int = 2 THEN 1 ELSE 0 END),
+  (CASE WHEN $2::int = 3 THEN 1 ELSE 0 END),
+  (CASE WHEN $2::int = 4 THEN 1 ELSE 0 END),
+  (CASE WHEN $2::int = 5 THEN 1 ELSE 0 END),
+  NOW()
+)
+ON CONFLICT (resource_id) DO UPDATE SET
+  total_reviews = resource_rating_stats.total_reviews + 1,
+  average_rating = ROUND(((resource_rating_stats.average_rating * resource_rating_stats.total_reviews) + ($2::int)::numeric) / (resource_rating_stats.total_reviews + 1), 2),
+  rating_1_count = resource_rating_stats.rating_1_count + (CASE WHEN $2::int = 1 THEN 1 ELSE 0 END),
+  rating_2_count = resource_rating_stats.rating_2_count + (CASE WHEN $2::int = 2 THEN 1 ELSE 0 END),
+  rating_3_count = resource_rating_stats.rating_3_count + (CASE WHEN $2::int = 3 THEN 1 ELSE 0 END),
+  rating_4_count = resource_rating_stats.rating_4_count + (CASE WHEN $2::int = 4 THEN 1 ELSE 0 END),
+  rating_5_count = resource_rating_stats.rating_5_count + (CASE WHEN $2::int = 5 THEN 1 ELSE 0 END),
+  updated_at = NOW()
+`
+
+type ApplyResourceRatingStatsOnCreateParams struct {
+	ResourceID uuid.UUID `json:"resource_id"`
+	Rating     int32     `json:"rating"`
+}
+
+func (q *Queries) ApplyResourceRatingStatsOnCreate(ctx context.Context, db DBTX, arg ApplyResourceRatingStatsOnCreateParams) error {
+	_, err := db.Exec(ctx, applyResourceRatingStatsOnCreate, arg.ResourceID, arg.Rating)
+	return err
+}
+
+const applyResourceRatingStatsOnDelete = `-- name: ApplyResourceRatingStatsOnDelete :exec
+UPDATE resource_rating_stats
+SET
+  total_reviews = GREATEST(total_reviews - 1, 0),
+  average_rating = CASE
+    WHEN total_reviews - 1 <= 0 THEN 0.00
+    ELSE ROUND(((average_rating * total_reviews) - ($1::int)::numeric) / (total_reviews - 1), 2)
+  END,
+  rating_1_count = rating_1_count - (CASE WHEN $1::int = 1 THEN 1 ELSE 0 END),
+  rating_2_count = rating_2_count - (CASE WHEN $1::int = 2 THEN 1 ELSE 0 END),
+  rating_3_count = rating_3_count - (CASE WHEN $1::int = 3 THEN 1 ELSE 0 END),
+  rating_4_count = rating_4_count - (CASE WHEN $1::int = 4 THEN 1 ELSE 0 END),
+  rating_5_count = rating_5_count - (CASE WHEN $1::int = 5 THEN 1 ELSE 0 END),
+  updated_at = NOW()
+WHERE resource_id = $2::uuid
+`
+
+type ApplyResourceRatingStatsOnDeleteParams struct {
+	Rating     int32     `json:"rating"`
+	ResourceID uuid.UUID `json:"resource_id"`
+}
+
+func (q *Queries) ApplyResourceRatingStatsOnDelete(ctx context.Context, db DBTX, arg ApplyResourceRatingStatsOnDeleteParams) error {
+	_, err := db.Exec(ctx, applyResourceRatingStatsOnDelete, arg.Rating, arg.ResourceID)
+	return err
+}
+
+const applyResourceRatingStatsOnUpdate = `-- name: ApplyResourceRatingStatsOnUpdate :exec
+UPDATE resource_rating_stats
+SET
+  average_rating = ROUND(((average_rating * total_reviews) - ($1::int)::numeric + ($2::int)::numeric) / NULLIF(total_reviews, 0), 2),
+  rating_1_count = rating_1_count + (CASE WHEN $2::int = 1 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 1 THEN 1 ELSE 0 END),
+  rating_2_count = rating_2_count + (CASE WHEN $2::int = 2 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 2 THEN 1 ELSE 0 END),
+  rating_3_count = rating_3_count + (CASE WHEN $2::int = 3 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 3 THEN 1 ELSE 0 END),
+  rating_4_count = rating_4_count + (CASE WHEN $2::int = 4 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 4 THEN 1 ELSE 0 END),
+  rating_5_count = rating_5_count + (CASE WHEN $2::int = 5 THEN 1 ELSE 0 END) - (CASE WHEN $1::int = 5 THEN 1 ELSE 0 END),
+  updated_at = NOW()
+WHERE resource_id = $3::uuid
+`
+
+type ApplyResourceRatingStatsOnUpdateParams struct {
+	OldRating  int32     `json:"old_rating"`
+	NewRating  int32     `json:"new_rating"`
+	ResourceID uuid.UUID `json:"resource_id"`
+}
+
+func (q *Queries) ApplyResourceRatingStatsOnUpdate(ctx context.Context, db DBTX, arg ApplyResourceRatingStatsOnUpdateParams) error {
+	_, err := db.Exec(ctx, applyResourceRatingStatsOnUpdate, arg.OldRating, arg.NewRating, arg.ResourceID)
+	return err
+}
+
 const createReview = `-- name: CreateReview :one
 INSERT INTO reviews (
+    id,
     user_id,
     resource_id,
     reservation_id,
     rating,
     comment
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, $6
 ) RETURNING id
 `
 
 type CreateReviewParams struct {
+	ID            uuid.UUID `json:"id"`
 	UserID        uuid.UUID `json:"user_id"`
 	ResourceID    uuid.UUID `json:"resource_id"`
 	ReservationID uuid.UUID `json:"reservation_id"`
@@ -34,6 +131,7 @@ type CreateReviewParams struct {
 
 func (q *Queries) CreateReview(ctx context.Context, db DBTX, arg CreateReviewParams) (uuid.UUID, error) {
 	row := db.QueryRow(ctx, createReview,
+		arg.ID,
 		arg.UserID,
 		arg.ResourceID,
 		arg.ReservationID,

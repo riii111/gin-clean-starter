@@ -23,12 +23,12 @@ type UpdateReviewRequest struct {
 }
 
 func (r *CreateReviewRequest) ToDomain(userID uuid.UUID, now time.Time) (*domreview.Review, error) {
-	return domreview.NewReview(userID, r.ResourceID, r.ReservationID, r.Rating, r.Comment, now)
+	return domreview.NewReview(uuid.Nil, userID, r.ResourceID, r.ReservationID, r.Rating, r.Comment, now)
 }
 
 func (r *UpdateReviewRequest) ToDomain(existing *shared.ReviewSnapshot, now time.Time) (*domreview.Review, error) {
 	rating := patch.Coalesce(r.Rating, existing.Rating)
 	comment := patch.Coalesce(r.Comment, existing.Comment)
 
-	return domreview.NewReview(existing.UserID, existing.ResourceID, existing.ReservationID, rating, comment, now)
+	return domreview.NewReview(existing.ID, existing.UserID, existing.ResourceID, existing.ReservationID, rating, comment, now)
 }

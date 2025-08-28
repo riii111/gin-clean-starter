@@ -108,7 +108,7 @@ func TestReview(t *testing.T) {
 		reservationID := uuid.New()
 		now := time.Now()
 
-		review, err := review.NewReview(userID, resourceID, reservationID, 4, "  Trimmed comment  ", now)
+		review, err := review.NewReview(uuid.Nil, userID, resourceID, reservationID, 4, "  Trimmed comment  ", now)
 		require.NoError(t, err)
 		require.NotNil(t, review)
 
@@ -121,8 +121,8 @@ func TestReview(t *testing.T) {
 		reservationID := uuid.New()
 		now := time.Now()
 
-		review1, err1 := review.NewReview(userID, resourceID, reservationID, 5, "Great!", now)
-		review2, err2 := review.NewReview(userID, resourceID, reservationID, 5, "Great!", now)
+		review1, err1 := review.NewReview(uuid.Nil, userID, resourceID, reservationID, 5, "Great!", now)
+		review2, err2 := review.NewReview(uuid.Nil, userID, resourceID, reservationID, 5, "Great!", now)
 
 		require.NoError(t, err1)
 		require.NoError(t, err2)

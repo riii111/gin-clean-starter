@@ -17,7 +17,7 @@ type Review struct {
 	updatedAt     time.Time
 }
 
-func NewReview(userID, resourceID, reservationID uuid.UUID, ratingValue int, commentText string, now time.Time) (*Review, error) {
+func NewReview(id, userID, resourceID, reservationID uuid.UUID, ratingValue int, commentText string, now time.Time) (*Review, error) {
 	rating, err := NewRating(ratingValue)
 	if err != nil {
 		return nil, err
@@ -28,8 +28,12 @@ func NewReview(userID, resourceID, reservationID uuid.UUID, ratingValue int, com
 		return nil, err
 	}
 
+	if id == uuid.Nil {
+		id = uuid.New()
+	}
+
 	return &Review{
-		id:            uuid.New(),
+		id:            id,
 		userID:        userID,
 		resourceID:    resourceID,
 		reservationID: reservationID,

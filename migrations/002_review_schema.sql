@@ -1,5 +1,5 @@
 CREATE TABLE reviews (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES users(id),
     resource_id UUID NOT NULL REFERENCES resources(id),
     reservation_id UUID NOT NULL REFERENCES reservations(id),
@@ -28,4 +28,3 @@ CREATE TABLE resource_rating_stats (
     rating_5_count INTEGER NOT NULL DEFAULT 0,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-

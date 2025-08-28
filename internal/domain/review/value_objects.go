@@ -1,6 +1,9 @@
 package review
 
-import "strings"
+import (
+	"strings"
+	"unicode/utf8"
+)
 
 const MaxCommentLength = 1000
 
@@ -26,7 +29,7 @@ func NewComment(s string) (Comment, error) {
 	if t == "" {
 		return Comment{}, ErrEmptyComment
 	}
-	if len(t) > MaxCommentLength {
+	if utf8.RuneCountInString(t) > MaxCommentLength {
 		return Comment{}, ErrCommentTooLong
 	}
 	return Comment{text: t}, nil

@@ -92,9 +92,7 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 
 	reqBody := builder.NewReviewBuilder().BuildCreateRequestDTO()
 	returnView := builder.NewReviewBuilder().BuildViewQuery()
-	expectedResult := &commands.CreateReviewResult{
-		ReviewID: returnView.ID,
-	}
+	expectedResult := &commands.CreateReviewResult{ReviewID: returnView.ID}
 
 	// Calculate total successful cases (normal + validation success cases)
 	bound := []testCaseReview{
@@ -132,17 +130,14 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 	// Set up mocks for all successful cases at once
 	s.mockCommands.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(expectedResult, nil).Times(totalSuccessfulCases)
-	s.mockQueries.EXPECT().GetByID(gomock.Any(), expectedResult.ReviewID).
-		Return(returnView, nil).Times(totalSuccessfulCases)
 
 	s.Run("正常系: 有効なリクエストで201 Createdが返却される", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "bearer-token")
 
-		var response resdto.ReviewResponse
-		httptest.AssertSuccessResponse(s.T(), rec, http.StatusCreated, &response)
-		s.Equal(returnView.ID.String(), response.ID)
-		s.Equal(returnView.Rating, response.Rating)
-		s.Equal(returnView.Comment, response.Comment)
+		var body map[string]string
+		httptest.AssertSuccessResponse(s.T(), rec, http.StatusCreated, &body)
+		s.Equal(returnView.ID.String(), body["id"])
+		s.Equal("/reviews/"+returnView.ID.String(), rec.Header().Get("Location"))
 	})
 
 	s.Run("異常系: バリデーションエラーで400 BadRequestが返される", func() {
@@ -187,19 +182,19 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 				name:           "ドメインバリデーションエラー",
 				commandsError:  commands.ErrDomainValidationFailed,
 				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Create review failed",
+				expectedMsg:    "Invalid request",
 			},
 			{
 				name:           "レビュー作成失敗",
 				commandsError:  commands.ErrReviewCreationFailed,
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Create review failed",
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Internal error",
 			},
 			{
 				name:           "内部サーバーエラー",
 				commandsError:  errors.New("database error"),
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Create review failed",
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Internal error",
 			},
 		}
 
@@ -214,15 +209,7 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 		}
 	})
 
-	s.Run("異常系: クエリ失敗で500 Internal Server Errorが返される", func() {
-		s.mockCommands.EXPECT().Create(gomock.Any(), reqBody, gomock.Any()).
-			Return(expectedResult, nil).Times(1)
-		s.mockQueries.EXPECT().GetByID(gomock.Any(), expectedResult.ReviewID).
-			Return(nil, errors.New("query failed")).Times(1)
-
-		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "bearer-token")
-		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Failed to load review")
-	})
+	// Query is no longer called in Create; skip query failure case.
 }
 
 // ================================================================================
@@ -388,14 +375,14 @@ func (s *ReviewHandlerTestSuite) TestUpdate() {
 			{
 				name:           "レビューが所有者でない",
 				commandsError:  commands.ErrReviewNotOwned,
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Update failed",
+				expectedStatus: http.StatusForbidden,
+				expectedMsg:    "Forbidden",
 			},
 			{
 				name:           "レビューが見つからない",
 				commandsError:  commands.ErrReviewNotFoundWrite,
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Update failed",
+				expectedStatus: http.StatusNotFound,
+				expectedMsg:    "Not found",
 			},
 			{
 				name:           "レビュー更新失敗",
@@ -470,14 +457,14 @@ func (s *ReviewHandlerTestSuite) TestDelete() {
 			{
 				name:           "レビューが所有者でない",
 				commandsError:  commands.ErrReviewNotOwned,
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Delete failed",
+				expectedStatus: http.StatusForbidden,
+				expectedMsg:    "Forbidden",
 			},
 			{
 				name:           "レビューが見つからない",
 				commandsError:  commands.ErrReviewNotFoundWrite,
-				expectedStatus: http.StatusBadRequest,
-				expectedMsg:    "Delete failed",
+				expectedStatus: http.StatusNotFound,
+				expectedMsg:    "Not found",
 			},
 			{
 				name:           "レビュー削除失敗",

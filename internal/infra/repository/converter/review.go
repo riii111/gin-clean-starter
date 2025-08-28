@@ -10,6 +10,7 @@ import (
 
 func ReviewToCreateParams(r *review.Review) sqlc.CreateReviewParams {
 	return sqlc.CreateReviewParams{
+		ID:            r.ID(),
 		UserID:        r.UserID(),
 		ResourceID:    r.ResourceID(),
 		ReservationID: r.ReservationID(),

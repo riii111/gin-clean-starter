@@ -517,7 +517,9 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/response.ReviewResponse'
+            additionalProperties:
+              type: string
+            type: object
         "400":
           description: Bad Request
           schema:

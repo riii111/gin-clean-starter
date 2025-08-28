@@ -62,7 +62,7 @@ func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateRevie
 			return errs.Mark(derr, ErrReviewCreationFailed)
 		}
 		createdID = id
-		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), req.ResourceID); derr != nil {
+		if derr := tx.RatingStats().ApplyOnCreate(ctx, tx.DB(), req.ResourceID, req.Rating); derr != nil {
 			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
 		}
 		return nil
@@ -93,8 +93,10 @@ func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, re
 		if derr := tx.Reviews().Update(ctx, tx.DB(), reviewID, updatedReview); derr != nil {
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
-		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), existing.ResourceID); derr != nil {
-			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
+		if existing.Rating != updatedReview.Rating().Value() {
+			if derr := tx.RatingStats().ApplyOnUpdate(ctx, tx.DB(), existing.ResourceID, existing.Rating, updatedReview.Rating().Value()); derr != nil {
+				return errs.Mark(derr, ErrRatingStatsRecalcFailed)
+			}
 		}
 		return nil
 	})
@@ -116,7 +118,7 @@ func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, ac
 		if derr = tx.Reviews().Delete(ctx, tx.DB(), reviewID); derr != nil {
 			return errs.Mark(derr, ErrReviewDeletionFailed)
 		}
-		if derr = tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), snap.ResourceID); derr != nil {
+		if derr = tx.RatingStats().ApplyOnDelete(ctx, tx.DB(), snap.ResourceID, snap.Rating); derr != nil {
 			return errs.Mark(derr, ErrRatingStatsRecalcFailed)
 		}
 		return nil

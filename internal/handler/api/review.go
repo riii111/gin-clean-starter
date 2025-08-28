@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	resdto "gin-clean-starter/internal/handler/dto/response"
 	"gin-clean-starter/internal/handler/httperr"
 	"gin-clean-starter/internal/handler/middleware"
+	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/commands"
 	"gin-clean-starter/internal/usecase/queries"
@@ -37,7 +39,7 @@ func NewReviewHandler(cmds commands.ReviewCommands, q queries.ReviewQueries) *Re
 // @Produce json
 // @Security BearerAuth
 // @Param request body request.CreateReviewRequest true "Create review request"
-// @Success 201 {object} response.ReviewResponse
+// @Success 201 {object} map[string]string
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 404 {object} map[string]string
@@ -58,17 +60,21 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 	result, err := h.cmds.Create(c.Request.Context(), req, userID)
 	if err != nil {
 		slog.Warn("Create review command failed", "user_id", userID, "error", err.Error())
-		httperr.AbortWithError(c, http.StatusBadRequest, err, "Create review failed", nil)
-		return
-	}
-	view, err := h.q.GetByID(c.Request.Context(), result.ReviewID)
-	if err != nil {
-		slog.Error("Failed to retrieve created review", "review_id", result.ReviewID, "error", err.Error())
-		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to load review", nil)
-		return
+		switch {
+		case infra.IsKind(err, infra.KindDuplicateKey):
+			httperr.AbortWithError(c, http.StatusConflict, err, "Review already exists for this reservation", nil)
+			return
+		case errors.Is(err, commands.ErrDomainValidationFailed):
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
+			return
+		default:
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+			return
+		}
 	}
 	slog.Info("Review created successfully", "review_id", result.ReviewID, "user_id", userID)
-	c.JSON(http.StatusCreated, resdto.FromReviewView(view))
+	c.Header("Location", "/reviews/"+result.ReviewID.String())
+	c.JSON(http.StatusCreated, gin.H{"id": result.ReviewID.String()})
 }
 
 // @Summary Get review
@@ -131,8 +137,20 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 	}
 	if err = h.cmds.Update(c.Request.Context(), id, req, actorID); err != nil {
 		slog.Warn("Update review command failed", "review_id", id, "actor_id", actorID, "error", err.Error())
-		httperr.AbortWithError(c, http.StatusBadRequest, err, "Update failed", nil)
-		return
+		switch {
+		case errors.Is(err, commands.ErrReviewNotOwned):
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Forbidden", nil)
+			return
+		case errors.Is(err, commands.ErrReviewNotFoundWrite):
+			httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
+			return
+		case errors.Is(err, commands.ErrDomainValidationFailed):
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
+			return
+		default:
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Update failed", nil)
+			return
+		}
 	}
 	view, err := h.q.GetByID(c.Request.Context(), id)
 	if err != nil {
@@ -171,8 +189,17 @@ func (h *ReviewHandler) Delete(c *gin.Context) {
 	role, _ := middleware.GetUserRole(c)
 	if err := h.cmds.Delete(c.Request.Context(), id, actorID, string(role)); err != nil {
 		slog.Warn("Delete review command failed", "review_id", id, "actor_id", actorID, "role", string(role), "error", err.Error())
-		httperr.AbortWithError(c, http.StatusBadRequest, err, "Delete failed", nil)
-		return
+		switch {
+		case errors.Is(err, commands.ErrReviewNotOwned):
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Forbidden", nil)
+			return
+		case errors.Is(err, commands.ErrReviewNotFoundWrite):
+			httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
+			return
+		default:
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Delete failed", nil)
+			return
+		}
 	}
 	slog.Info("Review deleted successfully", "review_id", id, "actor_id", actorID)
 	c.Status(http.StatusNoContent)

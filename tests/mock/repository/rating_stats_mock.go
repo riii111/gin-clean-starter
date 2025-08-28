@@ -42,6 +42,48 @@ func (m *MockRatingStatsQueries) EXPECT() *MockRatingStatsQueriesMockRecorder {
 	return m.recorder
 }
 
+// ApplyResourceRatingStatsOnCreate mocks base method.
+func (m *MockRatingStatsQueries) ApplyResourceRatingStatsOnCreate(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnCreateParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyResourceRatingStatsOnCreate", ctx, db, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyResourceRatingStatsOnCreate indicates an expected call of ApplyResourceRatingStatsOnCreate.
+func (mr *MockRatingStatsQueriesMockRecorder) ApplyResourceRatingStatsOnCreate(ctx, db, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourceRatingStatsOnCreate", reflect.TypeOf((*MockRatingStatsQueries)(nil).ApplyResourceRatingStatsOnCreate), ctx, db, arg)
+}
+
+// ApplyResourceRatingStatsOnDelete mocks base method.
+func (m *MockRatingStatsQueries) ApplyResourceRatingStatsOnDelete(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnDeleteParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyResourceRatingStatsOnDelete", ctx, db, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyResourceRatingStatsOnDelete indicates an expected call of ApplyResourceRatingStatsOnDelete.
+func (mr *MockRatingStatsQueriesMockRecorder) ApplyResourceRatingStatsOnDelete(ctx, db, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourceRatingStatsOnDelete", reflect.TypeOf((*MockRatingStatsQueries)(nil).ApplyResourceRatingStatsOnDelete), ctx, db, arg)
+}
+
+// ApplyResourceRatingStatsOnUpdate mocks base method.
+func (m *MockRatingStatsQueries) ApplyResourceRatingStatsOnUpdate(ctx context.Context, db sqlc.DBTX, arg sqlc.ApplyResourceRatingStatsOnUpdateParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyResourceRatingStatsOnUpdate", ctx, db, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyResourceRatingStatsOnUpdate indicates an expected call of ApplyResourceRatingStatsOnUpdate.
+func (mr *MockRatingStatsQueriesMockRecorder) ApplyResourceRatingStatsOnUpdate(ctx, db, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyResourceRatingStatsOnUpdate", reflect.TypeOf((*MockRatingStatsQueries)(nil).ApplyResourceRatingStatsOnUpdate), ctx, db, arg)
+}
+
 // RecalcResourceRatingStats mocks base method.
 func (m *MockRatingStatsQueries) RecalcResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) error {
 	m.ctrl.T.Helper()
