@@ -38,22 +38,14 @@ func TestRepository_Create(t *testing.T) {
 		{
 			name: "success: review created successfully",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				expectedRow := sqlc.Reviews{
-					ID:            uuid.New(),
-					UserID:        rev.UserID(),
-					ResourceID:    rev.ResourceID(),
-					ReservationID: rev.ReservationID(),
-					Rating:        int32(rev.Rating().Value()),
-					Comment:       rev.Comment().String(),
-				}
-				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(expectedRow, nil)
+				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(rev.ID(), nil)
 			},
 			expectedError: false,
 		},
 		{
 			name: "error: database error occurs",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(sqlc.Reviews{}, errors.New("database connection error"))
+				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(uuid.Nil, errors.New("database connection error"))
 			},
 			expectedError: true,
 			expectKind:    infra.KindDBFailure,
@@ -61,7 +53,7 @@ func TestRepository_Create(t *testing.T) {
 		{
 			name: "error: duplicate review error",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(sqlc.Reviews{}, errors.New("duplicate key value violates unique constraint"))
+				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(uuid.Nil, errors.New("duplicate key value violates unique constraint"))
 			},
 			expectedError: true,
 			expectKind:    infra.KindDBFailure,

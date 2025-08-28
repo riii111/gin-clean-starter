@@ -43,10 +43,10 @@ func (m *MockReviewWriteQueries) EXPECT() *MockReviewWriteQueriesMockRecorder {
 }
 
 // CreateReview mocks base method.
-func (m *MockReviewWriteQueries) CreateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReviewParams) (sqlc.Reviews, error) {
+func (m *MockReviewWriteQueries) CreateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReviewParams) (uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateReview", ctx, db, arg)
-	ret0, _ := ret[0].(sqlc.Reviews)
+	ret0, _ := ret[0].(uuid.UUID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

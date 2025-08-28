@@ -36,13 +36,13 @@ func TestReadStore_FindByID(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		setupMock     func(*readstoremock.MockReviewViewQueries, uuid.UUID)
+		setupMock     func(*readstoremock.MockReviewReadQueries, uuid.UUID)
 		expectedError bool
 		expectKind    infra.RepositoryErrorKind
 	}{
 		{
 			name: "success: review found",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, id uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, id uuid.UUID) {
 				expectedRow := sqlc.GetReviewViewByIDRow{
 					ID:            id,
 					UserID:        uuid.New(),
@@ -61,7 +61,7 @@ func TestReadStore_FindByID(t *testing.T) {
 		},
 		{
 			name: "error: review not found",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, id uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, id uuid.UUID) {
 				mock.EXPECT().GetReviewViewByID(ctx, gomock.Any(), id).Return(sqlc.GetReviewViewByIDRow{}, pgx.ErrNoRows)
 			},
 			expectedError: true,
@@ -69,7 +69,7 @@ func TestReadStore_FindByID(t *testing.T) {
 		},
 		{
 			name: "error: database error",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, id uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, id uuid.UUID) {
 				mock.EXPECT().GetReviewViewByID(ctx, gomock.Any(), id).Return(sqlc.GetReviewViewByIDRow{}, errDBConnectionLost)
 			},
 			expectedError: true,
@@ -82,7 +82,7 @@ func TestReadStore_FindByID(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockQueries := readstoremock.NewMockReviewViewQueries(ctrl)
+			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
 			store := readstore.NewReviewReadStore(mockQueries, mockDB)
 
@@ -118,14 +118,14 @@ func TestReadStore_FindByResourceFirstPage(t *testing.T) {
 		name          string
 		minRating     *int
 		maxRating     *int
-		setupMock     func(*readstoremock.MockReviewViewQueries, uuid.UUID, int32, *int, *int)
+		setupMock     func(*readstoremock.MockReviewReadQueries, uuid.UUID, int32, *int, *int)
 		expectedCount int
 		expectedError bool
 		expectKind    infra.RepositoryErrorKind
 	}{
 		{
 			name: "success: reviews found without rating filters",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
 				expectedRows := []sqlc.GetReviewsByResourceFirstPageRow{
 					{
 						ID:        uuid.New(),
@@ -151,7 +151,7 @@ func TestReadStore_FindByResourceFirstPage(t *testing.T) {
 			name:      "success: reviews found with rating filters",
 			minRating: func() *int { i := 4; return &i }(),
 			maxRating: func() *int { i := 5; return &i }(),
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
 				expectedRows := []sqlc.GetReviewsByResourceFirstPageRow{
 					{
 						ID:        uuid.New(),
@@ -168,7 +168,7 @@ func TestReadStore_FindByResourceFirstPage(t *testing.T) {
 		},
 		{
 			name: "success: no reviews found",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
 				mock.EXPECT().GetReviewsByResourceFirstPage(ctx, gomock.Any(), gomock.Any()).Return([]sqlc.GetReviewsByResourceFirstPageRow{}, nil)
 			},
 			expectedCount: 0,
@@ -176,7 +176,7 @@ func TestReadStore_FindByResourceFirstPage(t *testing.T) {
 		},
 		{
 			name: "error: database error",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, lmt int32, minRat, maxRat *int) {
 				mock.EXPECT().GetReviewsByResourceFirstPage(ctx, gomock.Any(), gomock.Any()).Return(nil, errDBConnectionLost)
 			},
 			expectedError: true,
@@ -189,7 +189,7 @@ func TestReadStore_FindByResourceFirstPage(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockQueries := readstoremock.NewMockReviewViewQueries(ctrl)
+			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
 			store := readstore.NewReviewReadStore(mockQueries, mockDB)
 
@@ -225,14 +225,14 @@ func TestReadStore_FindByResourceKeyset(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		setupMock     func(*readstoremock.MockReviewViewQueries, uuid.UUID, time.Time, uuid.UUID, int32)
+		setupMock     func(*readstoremock.MockReviewReadQueries, uuid.UUID, time.Time, uuid.UUID, int32)
 		expectedCount int
 		expectedError bool
 		expectKind    infra.RepositoryErrorKind
 	}{
 		{
 			name: "success: reviews found with keyset pagination",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, createdAt time.Time, id uuid.UUID, lmt int32) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, createdAt time.Time, id uuid.UUID, lmt int32) {
 				expectedRows := []sqlc.GetReviewsByResourceKeysetRow{
 					{
 						ID:        uuid.New(),
@@ -249,7 +249,7 @@ func TestReadStore_FindByResourceKeyset(t *testing.T) {
 		},
 		{
 			name: "error: database error",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID, createdAt time.Time, id uuid.UUID, lmt int32) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID, createdAt time.Time, id uuid.UUID, lmt int32) {
 				mock.EXPECT().GetReviewsByResourceKeyset(ctx, gomock.Any(), gomock.Any()).Return(nil, errDBConnectionLost)
 			},
 			expectedError: true,
@@ -262,7 +262,7 @@ func TestReadStore_FindByResourceKeyset(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockQueries := readstoremock.NewMockReviewViewQueries(ctrl)
+			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
 			store := readstore.NewReviewReadStore(mockQueries, mockDB)
 
@@ -296,14 +296,14 @@ func TestReadStore_FindByUserFirstPage(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		setupMock     func(*readstoremock.MockReviewViewQueries, uuid.UUID, int32)
+		setupMock     func(*readstoremock.MockReviewReadQueries, uuid.UUID, int32)
 		expectedCount int
 		expectedError bool
 		expectKind    infra.RepositoryErrorKind
 	}{
 		{
 			name: "success: user reviews found",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, usrID uuid.UUID, lmt int32) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, usrID uuid.UUID, lmt int32) {
 				expectedRows := []sqlc.GetReviewsByUserFirstPageRow{
 					{
 						ID:        uuid.New(),
@@ -320,7 +320,7 @@ func TestReadStore_FindByUserFirstPage(t *testing.T) {
 		},
 		{
 			name: "error: database error",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, usrID uuid.UUID, lmt int32) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, usrID uuid.UUID, lmt int32) {
 				mock.EXPECT().GetReviewsByUserFirstPage(ctx, gomock.Any(), gomock.Any()).Return(nil, errDBConnectionLost)
 			},
 			expectedError: true,
@@ -333,7 +333,7 @@ func TestReadStore_FindByUserFirstPage(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockQueries := readstoremock.NewMockReviewViewQueries(ctrl)
+			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
 			store := readstore.NewReviewReadStore(mockQueries, mockDB)
 
@@ -366,13 +366,13 @@ func TestReadStore_GetResourceRatingStats(t *testing.T) {
 
 	testCases := []struct {
 		name          string
-		setupMock     func(*readstoremock.MockReviewViewQueries, uuid.UUID)
+		setupMock     func(*readstoremock.MockReviewReadQueries, uuid.UUID)
 		expectedError bool
 		expectKind    infra.RepositoryErrorKind
 	}{
 		{
 			name: "success: rating stats found",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID) {
 				avgRating := pgtype.Numeric{Valid: true}
 				avgRating.Scan(4.5)
 				expectedRow := sqlc.ResourceRatingStats{
@@ -392,14 +392,14 @@ func TestReadStore_GetResourceRatingStats(t *testing.T) {
 		},
 		{
 			name: "success: no stats found returns zero stats",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID) {
 				mock.EXPECT().GetResourceRatingStats(ctx, gomock.Any(), resID).Return(sqlc.ResourceRatingStats{}, pgx.ErrNoRows)
 			},
 			expectedError: false,
 		},
 		{
 			name: "error: database error",
-			setupMock: func(mock *readstoremock.MockReviewViewQueries, resID uuid.UUID) {
+			setupMock: func(mock *readstoremock.MockReviewReadQueries, resID uuid.UUID) {
 				mock.EXPECT().GetResourceRatingStats(ctx, gomock.Any(), resID).Return(sqlc.ResourceRatingStats{}, errDBConnectionLost)
 			},
 			expectedError: true,
@@ -412,7 +412,7 @@ func TestReadStore_GetResourceRatingStats(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			mockQueries := readstoremock.NewMockReviewViewQueries(ctrl)
+			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
 			store := readstore.NewReviewReadStore(mockQueries, mockDB)
 
