@@ -92,3 +92,11 @@ func ValidateLimit(limit int) int {
 	}
 	return limit
 }
+
+// ToPgFetchLimit returns the SQL fetch size as int32 (limit+1) for keyset pagination.
+// ValidateLimit is applied internally to clamp values to a safe range.
+func ToPgFetchLimit(limit int) int32 {
+	l := ValidateLimit(limit)
+	// MaxListLimit keeps this safely within int32
+	return int32(l + 1)
+}

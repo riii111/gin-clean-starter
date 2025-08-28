@@ -3,7 +3,6 @@ package queries
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"gin-clean-starter/internal/infra"
@@ -72,21 +71,13 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 	var err error
 
 	if after == nil || after.After == "" {
-		if limit+1 > math.MaxInt32 {
-			return nil, nil, errs.New("limit too large")
-		}
-		// #nosec G115 -- limit is validated to be within int32 range above
-		rows, err = q.repo.FindByUserIDFirstPage(ctx, userID, int32(limit+1))
+		rows, err = q.repo.FindByUserIDFirstPage(ctx, userID, ToPgFetchLimit(limit))
 	} else {
 		lastCreatedAt, lastID, decodeErr := DecodeAfterCursor(after.After)
 		if decodeErr != nil {
 			return nil, nil, errs.Mark(decodeErr, ErrInvalidCursor)
 		}
-		if limit+1 > math.MaxInt32 {
-			return nil, nil, errs.New("limit too large")
-		}
-		// #nosec G115 -- limit is validated to be within int32 range above
-		rows, err = q.repo.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, int32(limit+1))
+		rows, err = q.repo.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
 	}
 
 	if err != nil {

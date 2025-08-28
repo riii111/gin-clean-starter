@@ -6,7 +6,6 @@ import (
 
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/pkg/errs"
-	"gin-clean-starter/internal/pkg/pgconv"
 
 	"github.com/google/uuid"
 )
@@ -96,15 +95,13 @@ func (q *reviewQueriesImpl) ListByResource(ctx context.Context, resourceID uuid.
 	var rows []*ReviewListItem
 	var err error
 	if cursor == nil || cursor.After == "" {
-		limit32 := pgconv.IntToInt32(limit + 1)
-		rows, err = q.repo.FindByResourceFirstPage(ctx, resourceID, limit32, filters.MinRating, filters.MaxRating)
+		rows, err = q.repo.FindByResourceFirstPage(ctx, resourceID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
 			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
-		limit32 := pgconv.IntToInt32(limit + 1)
-		rows, err = q.repo.FindByResourceKeyset(ctx, resourceID, lastCreatedAt, lastID, limit32, filters.MinRating, filters.MaxRating)
+		rows, err = q.repo.FindByResourceKeyset(ctx, resourceID, lastCreatedAt, lastID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
 	}
 	if err != nil {
 		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
@@ -133,15 +130,13 @@ func (q *reviewQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, ac
 	var rows []*ReviewListItem
 	var err error
 	if cursor == nil || cursor.After == "" {
-		limit32 := pgconv.IntToInt32(limit + 1)
-		rows, err = q.repo.FindByUserFirstPage(ctx, userID, limit32)
+		rows, err = q.repo.FindByUserFirstPage(ctx, userID, ToPgFetchLimit(limit))
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
 			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
-		limit32 := pgconv.IntToInt32(limit + 1)
-		rows, err = q.repo.FindByUserKeyset(ctx, userID, lastCreatedAt, lastID, limit32)
+		rows, err = q.repo.FindByUserKeyset(ctx, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
 	}
 	if err != nil {
 		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
