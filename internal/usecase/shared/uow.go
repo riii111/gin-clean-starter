@@ -56,7 +56,7 @@ type ReservationRepository interface {
 
 type ReviewRepository interface {
 	Create(ctx context.Context, tx sqlc.DBTX, rev *review.Review) (uuid.UUID, error)
-	Update(ctx context.Context, tx sqlc.DBTX, rev *review.Review) error
+	Update(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID, rev *review.Review) error
 	Delete(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID) error
 }
 

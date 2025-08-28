@@ -142,7 +142,7 @@ func TestRepository_Update(t *testing.T) {
 
 			tc.setupMock(mockQueries, domainReview, mockDB)
 
-			actualError := repo.Update(ctx, mockDB, domainReview)
+			actualError := repo.Update(ctx, mockDB, domainReview.ID(), domainReview)
 
 			if tc.expectedError {
 				require.Error(t, actualError)

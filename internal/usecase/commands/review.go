@@ -90,7 +90,7 @@ func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, re
 			return errs.Mark(err, ErrDomainValidationFailed)
 		}
 
-		if derr := tx.Reviews().Update(ctx, tx.DB(), updatedReview); derr != nil {
+		if derr := tx.Reviews().Update(ctx, tx.DB(), reviewID, updatedReview); derr != nil {
 			return errs.Mark(derr, ErrReviewUpdateFailed)
 		}
 		if derr := tx.RatingStats().RecalcResourceRatingStats(ctx, tx.DB(), existing.ResourceID); derr != nil {

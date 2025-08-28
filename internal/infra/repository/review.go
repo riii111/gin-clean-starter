@@ -7,7 +7,6 @@ import (
 	"gin-clean-starter/internal/infra"
 	"gin-clean-starter/internal/infra/repository/converter"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
-	"gin-clean-starter/internal/pkg/pgconv"
 
 	"github.com/google/uuid"
 )
@@ -39,12 +38,8 @@ func (r *ReviewRepository) Create(ctx context.Context, tx sqlc.DBTX, rev *review
 	return resultID, nil
 }
 
-func (r *ReviewRepository) Update(ctx context.Context, tx sqlc.DBTX, rev *review.Review) error {
-	params := sqlc.UpdateReviewParams{
-		ID:      rev.ID(),
-		Rating:  pgconv.IntToInt32(rev.Rating().Value()),
-		Comment: rev.Comment().String(),
-	}
+func (r *ReviewRepository) Update(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID, rev *review.Review) error {
+	params := converter.ReviewToUpdateParams(reviewID, rev)
 	if err := r.queries.UpdateReview(ctx, tx, params); err != nil {
 		return infra.WrapRepoErr("failed to update review", err)
 	}
