@@ -21,7 +21,7 @@ INSERT INTO reviews (
     comment
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING id, user_id, resource_id, reservation_id, rating, comment, created_at, updated_at
+) RETURNING id
 `
 
 type CreateReviewParams struct {
@@ -32,7 +32,7 @@ type CreateReviewParams struct {
 	Comment       string    `json:"comment"`
 }
 
-func (q *Queries) CreateReview(ctx context.Context, db DBTX, arg CreateReviewParams) (Reviews, error) {
+func (q *Queries) CreateReview(ctx context.Context, db DBTX, arg CreateReviewParams) (uuid.UUID, error) {
 	row := db.QueryRow(ctx, createReview,
 		arg.UserID,
 		arg.ResourceID,
@@ -40,18 +40,9 @@ func (q *Queries) CreateReview(ctx context.Context, db DBTX, arg CreateReviewPar
 		arg.Rating,
 		arg.Comment,
 	)
-	var i Reviews
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.ResourceID,
-		&i.ReservationID,
-		&i.Rating,
-		&i.Comment,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteReview = `-- name: DeleteReview :exec
@@ -174,8 +165,8 @@ SELECT
 FROM reviews r
 JOIN users u ON r.user_id = u.id
 WHERE r.resource_id = $1
-  AND ($3 IS NULL OR r.rating >= $3)
-  AND ($4 IS NULL OR r.rating <= $4)
+  AND ($3::int IS NULL OR r.rating >= $3::int)
+  AND ($4::int IS NULL OR r.rating <= $4::int)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $2
 `
@@ -183,8 +174,8 @@ LIMIT $2
 type GetReviewsByResourceFirstPageParams struct {
 	ResourceID uuid.UUID   `json:"resource_id"`
 	Limit      int32       `json:"limit"`
-	MinRating  interface{} `json:"min_rating"`
-	MaxRating  interface{} `json:"max_rating"`
+	MinRating  pgtype.Int4 `json:"min_rating"`
+	MaxRating  pgtype.Int4 `json:"max_rating"`
 }
 
 type GetReviewsByResourceFirstPageRow struct {
@@ -237,8 +228,8 @@ FROM reviews r
 JOIN users u ON r.user_id = u.id
 WHERE r.resource_id = $1
   AND (r.created_at < $2 OR (r.created_at = $2 AND r.id < $3))
-  AND ($5 IS NULL OR r.rating >= $5)
-  AND ($6 IS NULL OR r.rating <= $6)
+  AND ($5::int IS NULL OR r.rating >= $5::int)
+  AND ($6::int IS NULL OR r.rating <= $6::int)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $4
 `
@@ -248,8 +239,8 @@ type GetReviewsByResourceKeysetParams struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 	ID         uuid.UUID          `json:"id"`
 	Limit      int32              `json:"limit"`
-	MinRating  interface{}        `json:"min_rating"`
-	MaxRating  interface{}        `json:"max_rating"`
+	MinRating  pgtype.Int4        `json:"min_rating"`
+	MaxRating  pgtype.Int4        `json:"max_rating"`
 }
 
 type GetReviewsByResourceKeysetRow struct {

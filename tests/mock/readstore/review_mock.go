@@ -18,32 +18,32 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
-// MockReviewViewQueries is a mock of ReviewViewQueries interface.
-type MockReviewViewQueries struct {
+// MockReviewReadQueries is a mock of ReviewReadQueries interface.
+type MockReviewReadQueries struct {
 	ctrl     *gomock.Controller
-	recorder *MockReviewViewQueriesMockRecorder
+	recorder *MockReviewReadQueriesMockRecorder
 	isgomock struct{}
 }
 
-// MockReviewViewQueriesMockRecorder is the mock recorder for MockReviewViewQueries.
-type MockReviewViewQueriesMockRecorder struct {
-	mock *MockReviewViewQueries
+// MockReviewReadQueriesMockRecorder is the mock recorder for MockReviewReadQueries.
+type MockReviewReadQueriesMockRecorder struct {
+	mock *MockReviewReadQueries
 }
 
-// NewMockReviewViewQueries creates a new mock instance.
-func NewMockReviewViewQueries(ctrl *gomock.Controller) *MockReviewViewQueries {
-	mock := &MockReviewViewQueries{ctrl: ctrl}
-	mock.recorder = &MockReviewViewQueriesMockRecorder{mock}
+// NewMockReviewReadQueries creates a new mock instance.
+func NewMockReviewReadQueries(ctrl *gomock.Controller) *MockReviewReadQueries {
+	mock := &MockReviewReadQueries{ctrl: ctrl}
+	mock.recorder = &MockReviewReadQueriesMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockReviewViewQueries) EXPECT() *MockReviewViewQueriesMockRecorder {
+func (m *MockReviewReadQueries) EXPECT() *MockReviewReadQueriesMockRecorder {
 	return m.recorder
 }
 
 // GetResourceRatingStats mocks base method.
-func (m *MockReviewViewQueries) GetResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) (sqlc.ResourceRatingStats, error) {
+func (m *MockReviewReadQueries) GetResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) (sqlc.ResourceRatingStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetResourceRatingStats", ctx, db, resourceID)
 	ret0, _ := ret[0].(sqlc.ResourceRatingStats)
@@ -52,13 +52,13 @@ func (m *MockReviewViewQueries) GetResourceRatingStats(ctx context.Context, db s
 }
 
 // GetResourceRatingStats indicates an expected call of GetResourceRatingStats.
-func (mr *MockReviewViewQueriesMockRecorder) GetResourceRatingStats(ctx, db, resourceID any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetResourceRatingStats(ctx, db, resourceID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResourceRatingStats", reflect.TypeOf((*MockReviewViewQueries)(nil).GetResourceRatingStats), ctx, db, resourceID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResourceRatingStats", reflect.TypeOf((*MockReviewReadQueries)(nil).GetResourceRatingStats), ctx, db, resourceID)
 }
 
 // GetReviewViewByID mocks base method.
-func (m *MockReviewViewQueries) GetReviewViewByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReviewViewByIDRow, error) {
+func (m *MockReviewReadQueries) GetReviewViewByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (sqlc.GetReviewViewByIDRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReviewViewByID", ctx, db, id)
 	ret0, _ := ret[0].(sqlc.GetReviewViewByIDRow)
@@ -67,13 +67,13 @@ func (m *MockReviewViewQueries) GetReviewViewByID(ctx context.Context, db sqlc.D
 }
 
 // GetReviewViewByID indicates an expected call of GetReviewViewByID.
-func (mr *MockReviewViewQueriesMockRecorder) GetReviewViewByID(ctx, db, id any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetReviewViewByID(ctx, db, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewViewByID", reflect.TypeOf((*MockReviewViewQueries)(nil).GetReviewViewByID), ctx, db, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewViewByID", reflect.TypeOf((*MockReviewReadQueries)(nil).GetReviewViewByID), ctx, db, id)
 }
 
 // GetReviewsByResourceFirstPage mocks base method.
-func (m *MockReviewViewQueries) GetReviewsByResourceFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceFirstPageParams) ([]sqlc.GetReviewsByResourceFirstPageRow, error) {
+func (m *MockReviewReadQueries) GetReviewsByResourceFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceFirstPageParams) ([]sqlc.GetReviewsByResourceFirstPageRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReviewsByResourceFirstPage", ctx, db, arg)
 	ret0, _ := ret[0].([]sqlc.GetReviewsByResourceFirstPageRow)
@@ -82,13 +82,13 @@ func (m *MockReviewViewQueries) GetReviewsByResourceFirstPage(ctx context.Contex
 }
 
 // GetReviewsByResourceFirstPage indicates an expected call of GetReviewsByResourceFirstPage.
-func (mr *MockReviewViewQueriesMockRecorder) GetReviewsByResourceFirstPage(ctx, db, arg any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetReviewsByResourceFirstPage(ctx, db, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByResourceFirstPage", reflect.TypeOf((*MockReviewViewQueries)(nil).GetReviewsByResourceFirstPage), ctx, db, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByResourceFirstPage", reflect.TypeOf((*MockReviewReadQueries)(nil).GetReviewsByResourceFirstPage), ctx, db, arg)
 }
 
 // GetReviewsByResourceKeyset mocks base method.
-func (m *MockReviewViewQueries) GetReviewsByResourceKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceKeysetParams) ([]sqlc.GetReviewsByResourceKeysetRow, error) {
+func (m *MockReviewReadQueries) GetReviewsByResourceKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByResourceKeysetParams) ([]sqlc.GetReviewsByResourceKeysetRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReviewsByResourceKeyset", ctx, db, arg)
 	ret0, _ := ret[0].([]sqlc.GetReviewsByResourceKeysetRow)
@@ -97,13 +97,13 @@ func (m *MockReviewViewQueries) GetReviewsByResourceKeyset(ctx context.Context, 
 }
 
 // GetReviewsByResourceKeyset indicates an expected call of GetReviewsByResourceKeyset.
-func (mr *MockReviewViewQueriesMockRecorder) GetReviewsByResourceKeyset(ctx, db, arg any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetReviewsByResourceKeyset(ctx, db, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByResourceKeyset", reflect.TypeOf((*MockReviewViewQueries)(nil).GetReviewsByResourceKeyset), ctx, db, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByResourceKeyset", reflect.TypeOf((*MockReviewReadQueries)(nil).GetReviewsByResourceKeyset), ctx, db, arg)
 }
 
 // GetReviewsByUserFirstPage mocks base method.
-func (m *MockReviewViewQueries) GetReviewsByUserFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByUserFirstPageParams) ([]sqlc.GetReviewsByUserFirstPageRow, error) {
+func (m *MockReviewReadQueries) GetReviewsByUserFirstPage(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByUserFirstPageParams) ([]sqlc.GetReviewsByUserFirstPageRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReviewsByUserFirstPage", ctx, db, arg)
 	ret0, _ := ret[0].([]sqlc.GetReviewsByUserFirstPageRow)
@@ -112,13 +112,13 @@ func (m *MockReviewViewQueries) GetReviewsByUserFirstPage(ctx context.Context, d
 }
 
 // GetReviewsByUserFirstPage indicates an expected call of GetReviewsByUserFirstPage.
-func (mr *MockReviewViewQueriesMockRecorder) GetReviewsByUserFirstPage(ctx, db, arg any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetReviewsByUserFirstPage(ctx, db, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByUserFirstPage", reflect.TypeOf((*MockReviewViewQueries)(nil).GetReviewsByUserFirstPage), ctx, db, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByUserFirstPage", reflect.TypeOf((*MockReviewReadQueries)(nil).GetReviewsByUserFirstPage), ctx, db, arg)
 }
 
 // GetReviewsByUserKeyset mocks base method.
-func (m *MockReviewViewQueries) GetReviewsByUserKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByUserKeysetParams) ([]sqlc.GetReviewsByUserKeysetRow, error) {
+func (m *MockReviewReadQueries) GetReviewsByUserKeyset(ctx context.Context, db sqlc.DBTX, arg sqlc.GetReviewsByUserKeysetParams) ([]sqlc.GetReviewsByUserKeysetRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReviewsByUserKeyset", ctx, db, arg)
 	ret0, _ := ret[0].([]sqlc.GetReviewsByUserKeysetRow)
@@ -127,7 +127,7 @@ func (m *MockReviewViewQueries) GetReviewsByUserKeyset(ctx context.Context, db s
 }
 
 // GetReviewsByUserKeyset indicates an expected call of GetReviewsByUserKeyset.
-func (mr *MockReviewViewQueriesMockRecorder) GetReviewsByUserKeyset(ctx, db, arg any) *gomock.Call {
+func (mr *MockReviewReadQueriesMockRecorder) GetReviewsByUserKeyset(ctx, db, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByUserKeyset", reflect.TypeOf((*MockReviewViewQueries)(nil).GetReviewsByUserKeyset), ctx, db, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReviewsByUserKeyset", reflect.TypeOf((*MockReviewReadQueries)(nil).GetReviewsByUserKeyset), ctx, db, arg)
 }

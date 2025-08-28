@@ -7,7 +7,7 @@ INSERT INTO reviews (
     comment
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING *;
+) RETURNING id;
 
 -- name: UpdateReview :exec
 UPDATE reviews
@@ -21,7 +21,7 @@ WHERE id = $1;
 DELETE FROM reviews WHERE id = $1;
 
 -- name: GetReviewByID :one
-SELECT * FROM reviews WHERE id = $1;
+SELECT id, user_id, resource_id, reservation_id, rating, comment, created_at, updated_at FROM reviews WHERE id = $1;
 
 -- name: GetReviewViewByID :one
 SELECT 
@@ -50,8 +50,8 @@ SELECT
 FROM reviews r
 JOIN users u ON r.user_id = u.id
 WHERE r.resource_id = $1
-  AND (sqlc.narg(min_rating) IS NULL OR r.rating >= sqlc.narg(min_rating))
-  AND (sqlc.narg(max_rating) IS NULL OR r.rating <= sqlc.narg(max_rating))
+  AND (sqlc.narg(min_rating)::int IS NULL OR r.rating >= sqlc.narg(min_rating)::int)
+  AND (sqlc.narg(max_rating)::int IS NULL OR r.rating <= sqlc.narg(max_rating)::int)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $2;
 
@@ -66,8 +66,8 @@ FROM reviews r
 JOIN users u ON r.user_id = u.id
 WHERE r.resource_id = $1
   AND (r.created_at < $2 OR (r.created_at = $2 AND r.id < $3))
-  AND (sqlc.narg(min_rating) IS NULL OR r.rating >= sqlc.narg(min_rating))
-  AND (sqlc.narg(max_rating) IS NULL OR r.rating <= sqlc.narg(max_rating))
+  AND (sqlc.narg(min_rating)::int IS NULL OR r.rating >= sqlc.narg(min_rating)::int)
+  AND (sqlc.narg(max_rating)::int IS NULL OR r.rating <= sqlc.narg(max_rating)::int)
 ORDER BY r.created_at DESC, r.id DESC
 LIMIT $4;
 

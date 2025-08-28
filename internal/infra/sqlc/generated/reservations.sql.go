@@ -23,7 +23,7 @@ INSERT INTO reservations (
     note
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) RETURNING id, resource_id, user_id, slot, status, price_cents, coupon_id, note, created_at, updated_at
+) RETURNING id
 `
 
 type CreateReservationParams struct {
@@ -36,7 +36,7 @@ type CreateReservationParams struct {
 	Note       pgtype.Text `json:"note"`
 }
 
-func (q *Queries) CreateReservation(ctx context.Context, db DBTX, arg CreateReservationParams) (Reservations, error) {
+func (q *Queries) CreateReservation(ctx context.Context, db DBTX, arg CreateReservationParams) (uuid.UUID, error) {
 	row := db.QueryRow(ctx, createReservation,
 		arg.ResourceID,
 		arg.UserID,
@@ -46,20 +46,9 @@ func (q *Queries) CreateReservation(ctx context.Context, db DBTX, arg CreateRese
 		arg.CouponID,
 		arg.Note,
 	)
-	var i Reservations
-	err := row.Scan(
-		&i.ID,
-		&i.ResourceID,
-		&i.UserID,
-		&i.Slot,
-		&i.Status,
-		&i.PriceCents,
-		&i.CouponID,
-		&i.Note,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const getReservationByID = `-- name: GetReservationByID :one
@@ -67,7 +56,7 @@ SELECT
     r.id,
     r.resource_id,
     r.user_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.coupon_id,
@@ -88,7 +77,7 @@ type GetReservationByIDRow struct {
 	ID           uuid.UUID          `json:"id"`
 	ResourceID   uuid.UUID          `json:"resource_id"`
 	UserID       uuid.UUID          `json:"user_id"`
-	Slot         string             `json:"slot"`
+	RSlot        string             `json:"r_slot"`
 	Status       string             `json:"status"`
 	PriceCents   int32              `json:"price_cents"`
 	CouponID     pgtype.UUID        `json:"coupon_id"`
@@ -107,7 +96,7 @@ func (q *Queries) GetReservationByID(ctx context.Context, db DBTX, id uuid.UUID)
 		&i.ID,
 		&i.ResourceID,
 		&i.UserID,
-		&i.Slot,
+		&i.RSlot,
 		&i.Status,
 		&i.PriceCents,
 		&i.CouponID,
@@ -125,7 +114,7 @@ const getReservationsByUserIDFirstPage = `-- name: GetReservationsByUserIDFirstP
 SELECT 
     r.id,
     r.resource_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.created_at,
@@ -145,7 +134,7 @@ type GetReservationsByUserIDFirstPageParams struct {
 type GetReservationsByUserIDFirstPageRow struct {
 	ID           uuid.UUID          `json:"id"`
 	ResourceID   uuid.UUID          `json:"resource_id"`
-	Slot         string             `json:"slot"`
+	RSlot        string             `json:"r_slot"`
 	Status       string             `json:"status"`
 	PriceCents   int32              `json:"price_cents"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
@@ -164,7 +153,7 @@ func (q *Queries) GetReservationsByUserIDFirstPage(ctx context.Context, db DBTX,
 		if err := rows.Scan(
 			&i.ID,
 			&i.ResourceID,
-			&i.Slot,
+			&i.RSlot,
 			&i.Status,
 			&i.PriceCents,
 			&i.CreatedAt,
@@ -184,7 +173,7 @@ const getReservationsByUserIDKeyset = `-- name: GetReservationsByUserIDKeyset :m
 SELECT 
     r.id,
     r.resource_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.created_at,
@@ -207,7 +196,7 @@ type GetReservationsByUserIDKeysetParams struct {
 type GetReservationsByUserIDKeysetRow struct {
 	ID           uuid.UUID          `json:"id"`
 	ResourceID   uuid.UUID          `json:"resource_id"`
-	Slot         string             `json:"slot"`
+	RSlot        string             `json:"r_slot"`
 	Status       string             `json:"status"`
 	PriceCents   int32              `json:"price_cents"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
@@ -231,7 +220,7 @@ func (q *Queries) GetReservationsByUserIDKeyset(ctx context.Context, db DBTX, ar
 		if err := rows.Scan(
 			&i.ID,
 			&i.ResourceID,
-			&i.Slot,
+			&i.RSlot,
 			&i.Status,
 			&i.PriceCents,
 			&i.CreatedAt,

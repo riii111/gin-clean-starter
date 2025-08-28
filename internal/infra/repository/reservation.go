@@ -12,7 +12,7 @@ import (
 )
 
 type ReservationWriteQueries interface {
-	CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (sqlc.Reservations, error)
+	CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (uuid.UUID, error)
 }
 
 type ReservationRepository struct {
@@ -30,10 +30,10 @@ func NewReservationRepository(queries *sqlc.Queries, db sqlc.DBTX) *ReservationR
 func (r *ReservationRepository) Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (uuid.UUID, error) {
 	params := converter.ReservationToInfra(res)
 
-	result, err := r.queries.CreateReservation(ctx, tx, params)
+	resultID, err := r.queries.CreateReservation(ctx, tx, params)
 	if err != nil {
 		return uuid.Nil, infra.WrapRepoErr("failed to create reservation", err)
 	}
 
-	return result.ID, nil
+	return resultID, nil
 }

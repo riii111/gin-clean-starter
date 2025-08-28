@@ -13,7 +13,7 @@ import (
 )
 
 type ReviewWriteQueries interface {
-	CreateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReviewParams) (sqlc.Reviews, error)
+	CreateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReviewParams) (uuid.UUID, error)
 	UpdateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateReviewParams) error
 	DeleteReview(ctx context.Context, db sqlc.DBTX, id uuid.UUID) error
 }
@@ -32,11 +32,11 @@ func NewReviewRepository(queries ReviewWriteQueries, db sqlc.DBTX) *ReviewReposi
 
 func (r *ReviewRepository) Create(ctx context.Context, tx sqlc.DBTX, rev *review.Review) (uuid.UUID, error) {
 	params := converter.ReviewToCreateParams(rev)
-	row, err := r.queries.CreateReview(ctx, tx, params)
+	resultID, err := r.queries.CreateReview(ctx, tx, params)
 	if err != nil {
 		return uuid.Nil, infra.WrapRepoErr("failed to create review", err)
 	}
-	return row.ID, nil
+	return resultID, nil
 }
 
 func (r *ReviewRepository) Update(ctx context.Context, tx sqlc.DBTX, rev *review.Review) error {

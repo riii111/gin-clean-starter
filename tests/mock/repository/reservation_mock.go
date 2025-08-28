@@ -14,6 +14,7 @@ import (
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	reflect "reflect"
 
+	uuid "github.com/google/uuid"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,10 +43,10 @@ func (m *MockReservationWriteQueries) EXPECT() *MockReservationWriteQueriesMockR
 }
 
 // CreateReservation mocks base method.
-func (m *MockReservationWriteQueries) CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (sqlc.Reservations, error) {
+func (m *MockReservationWriteQueries) CreateReservation(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReservationParams) (uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateReservation", ctx, db, arg)
-	ret0, _ := ret[0].(sqlc.Reservations)
+	ret0, _ := ret[0].(uuid.UUID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

@@ -43,10 +43,10 @@ func (m *MockUserWriteQueries) EXPECT() *MockUserWriteQueriesMockRecorder {
 }
 
 // CreateUser mocks base method.
-func (m *MockUserWriteQueries) CreateUser(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateUserParams) (sqlc.CreateUserRow, error) {
+func (m *MockUserWriteQueries) CreateUser(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateUserParams) (uuid.UUID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CreateUser", ctx, db, arg)
-	ret0, _ := ret[0].(sqlc.CreateUserRow)
+	ret0, _ := ret[0].(uuid.UUID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
