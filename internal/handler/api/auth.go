@@ -77,7 +77,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), result.UserID)
 	if err != nil {
-		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err)
+		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err,
 			"Internal server error", nil)
 		return

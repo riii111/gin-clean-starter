@@ -221,7 +221,7 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 	}
 	items, next, err := h.q.ListByResource(c.Request.Context(), resourceID, queries.ReviewFilters{MinRating: minPtr, MaxRating: maxPtr}, cursor, limit)
 	if err != nil {
-		slog.Error("list reviews by resource failed", "error", err)
+		slog.Error("list reviews by resource failed", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
 		return
 	}
