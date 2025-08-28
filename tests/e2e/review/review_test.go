@@ -196,6 +196,8 @@ func (s *ReviewSuite) TestGetReview() {
 			cmpopts.IgnoreFields(response.ReviewResponse{}, "UserID", "UserEmail", "ResourceID", "ResourceName", "ReservationID", "CreatedAt", "UpdatedAt"),
 		}
 
+		expected.ID = createdReview.ID
+
 		if diff := cmp.Diff(expected, &actualRes, opts...); diff != "" {
 			t.Errorf("Review response mismatch (-want +got):\n%s", diff)
 		}
@@ -514,13 +516,6 @@ func (s *ReviewSuite) TestListResourceReviews() {
 	s.Run("Normal case: Integration test (filter + pagination)", func() {
 		t := s.T()
 
-		type listTestCase struct {
-			name          string
-			queryParams   string
-			expectedCount int
-			validateFunc  func(t *testing.T, reviews []*response.ReviewListItemResponse)
-		}
-
 		resourceID := dbtest.CreateTestResource(t, s.DB, "Filter Test Resource", 60)
 		user1ID := dbtest.CreateTestUser(t, s.DB, "filter1@example.com", string(user.RoleAdmin))
 		user2ID := dbtest.CreateTestUser(t, s.DB, "filter2@example.com", string(user.RoleAdmin))
@@ -538,76 +533,68 @@ func (s *ReviewSuite) TestListResourceReviews() {
 		token2 := authtest.LoginUser(t, s.Router, "filter2@example.com", "password123")
 		token3 := authtest.LoginUser(t, s.Router, "filter3@example.com", "password123")
 
-		// Create reviews with different ratings
-		reviews := []struct {
-			token         string
-			reservationID uuid.UUID
-			rating        int
-			comment       string
+		// create 3 reviews
+		for _, rv := range []struct {
+			token   string
+			resID   uuid.UUID
+			rating  int
+			comment string
 		}{
 			{token1, reservation1ID, 5, "Excellent!"},
 			{token2, reservation2ID, 2, "Poor service"},
 			{token3, reservation3ID, 4, "Good service"},
-		}
-
-		for _, review := range reviews {
+		} {
 			req := builder.NewReviewBuilder().
 				WithResourceID(resourceID).
-				WithReservationID(review.reservationID).
-				WithRating(review.rating).
-				WithComment(review.comment).
+				WithReservationID(rv.resID).
+				WithRating(rv.rating).
+				WithComment(rv.comment).
 				BuildCreateRequestDTO()
-
-			resp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, req, review.token)
-			require.Equal(t, http.StatusCreated, resp.Code)
+			resp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, req, rv.token)
+			require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
 		}
 
-		testCases := []listTestCase{
-			{
-				name:          "Filter by minimum rating",
-				queryParams:   "?min_rating=4",
-				expectedCount: 2,
-				validateFunc: func(t *testing.T, reviews []*response.ReviewListItemResponse) {
-					// Should return ratings 4 and 5
-					for _, review := range reviews {
-						require.GreaterOrEqual(t, review.Rating, int32(4))
-					}
-				},
-			},
-			{
-				name:          "Filter by maximum rating",
-				queryParams:   "?max_rating=3",
-				expectedCount: 1,
-				validateFunc: func(t *testing.T, reviews []*response.ReviewListItemResponse) {
-					// Should return only rating 2
-					require.Equal(t, int32(2), reviews[0].Rating)
-				},
-			},
-			{
-				name:          "Limit results",
-				queryParams:   "?limit=2",
-				expectedCount: 2,
-				validateFunc:  nil,
-			},
+		// case: min_rating=4 -> expect 2
+		{
+			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?min_rating=4"
+			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
+			require.Equal(t, http.StatusOK, w.Code)
+			var out struct {
+				Reviews []*response.ReviewListItemResponse `json:"reviews"`
+			}
+			err := httptest.DecodeResponseBody(t, w.Body, &out)
+			require.NoError(t, err)
+			require.Len(t, out.Reviews, 2)
+			for _, r := range out.Reviews {
+				require.GreaterOrEqual(t, r.Rating, int32(4))
+			}
 		}
 
-		for _, tc := range testCases {
-			s.Run(tc.name, func() {
-				url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + tc.queryParams
-				w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
-				require.Equal(t, http.StatusOK, w.Code)
+		// case: max_rating=3 -> expect 1 (rating == 2)
+		{
+			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?max_rating=3"
+			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
+			require.Equal(t, http.StatusOK, w.Code)
+			var out struct {
+				Reviews []*response.ReviewListItemResponse `json:"reviews"`
+			}
+			err := httptest.DecodeResponseBody(t, w.Body, &out)
+			require.NoError(t, err)
+			require.Len(t, out.Reviews, 1)
+			require.Equal(t, int32(2), out.Reviews[0].Rating)
+		}
 
-				var actualRes struct {
-					Reviews []*response.ReviewListItemResponse `json:"reviews"`
-				}
-				err := httptest.DecodeResponseBody(t, w.Body, &actualRes)
-				require.NoError(t, err)
-				require.Len(t, actualRes.Reviews, tc.expectedCount)
-
-				if tc.validateFunc != nil {
-					tc.validateFunc(t, actualRes.Reviews)
-				}
-			})
+		// case: limit=2 -> expect 2
+		{
+			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?limit=2"
+			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
+			require.Equal(t, http.StatusOK, w.Code)
+			var out struct {
+				Reviews []*response.ReviewListItemResponse `json:"reviews"`
+			}
+			err := httptest.DecodeResponseBody(t, w.Body, &out)
+			require.NoError(t, err)
+			require.Len(t, out.Reviews, 2)
 		}
 	})
 }
