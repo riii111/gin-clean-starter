@@ -146,13 +146,16 @@ func (q *Queries) CreateReview(ctx context.Context, db DBTX, arg CreateReviewPar
 	return id, err
 }
 
-const deleteReview = `-- name: DeleteReview :exec
+const deleteReview = `-- name: DeleteReview :one
 DELETE FROM reviews WHERE id = $1
+RETURNING 1
 `
 
-func (q *Queries) DeleteReview(ctx context.Context, db DBTX, id uuid.UUID) error {
-	_, err := db.Exec(ctx, deleteReview, id)
-	return err
+func (q *Queries) DeleteReview(ctx context.Context, db DBTX, id uuid.UUID) (int32, error) {
+	row := db.QueryRow(ctx, deleteReview, id)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getResourceRatingStats = `-- name: GetResourceRatingStats :one
@@ -499,13 +502,14 @@ func (q *Queries) GetReviewsByUserKeyset(ctx context.Context, db DBTX, arg GetRe
 	return items, nil
 }
 
-const updateReview = `-- name: UpdateReview :exec
+const updateReview = `-- name: UpdateReview :one
 UPDATE reviews
 SET
     rating = $2,
     comment = $3,
     updated_at = NOW()
 WHERE id = $1
+RETURNING 1
 `
 
 type UpdateReviewParams struct {
@@ -514,7 +518,9 @@ type UpdateReviewParams struct {
 	Comment string    `json:"comment"`
 }
 
-func (q *Queries) UpdateReview(ctx context.Context, db DBTX, arg UpdateReviewParams) error {
-	_, err := db.Exec(ctx, updateReview, arg.ID, arg.Rating, arg.Comment)
-	return err
+func (q *Queries) UpdateReview(ctx context.Context, db DBTX, arg UpdateReviewParams) (int32, error) {
+	row := db.QueryRow(ctx, updateReview, arg.ID, arg.Rating, arg.Comment)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }

@@ -106,14 +106,14 @@ func TestRepository_Update(t *testing.T) {
 		{
 			name: "success: review updated successfully",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(nil)
+				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(int32(1), nil)
 			},
 			expectedError: false,
 		},
 		{
 			name: "error: database error occurs",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(errors.New("database connection error"))
+				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(int32(0), errors.New("database connection error"))
 			},
 			expectedError: true,
 			expectKind:    infra.KindDBFailure,
@@ -121,10 +121,10 @@ func TestRepository_Update(t *testing.T) {
 		{
 			name: "error: review not found",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(errors.New("no rows affected"))
+				mock.EXPECT().UpdateReview(ctx, tx, gomock.Any()).Return(int32(0), nil)
 			},
 			expectedError: true,
-			expectKind:    infra.KindDBFailure,
+			expectKind:    infra.KindNotFound,
 		},
 	}
 
@@ -173,14 +173,14 @@ func TestRepository_Delete(t *testing.T) {
 		{
 			name: "success: review deleted successfully",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, id uuid.UUID, tx sqlc.DBTX) {
-				mock.EXPECT().DeleteReview(ctx, tx, id).Return(nil)
+				mock.EXPECT().DeleteReview(ctx, tx, id).Return(int32(1), nil)
 			},
 			expectedError: false,
 		},
 		{
 			name: "error: database error occurs",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, id uuid.UUID, tx sqlc.DBTX) {
-				mock.EXPECT().DeleteReview(ctx, tx, id).Return(errors.New("database connection error"))
+				mock.EXPECT().DeleteReview(ctx, tx, id).Return(int32(0), errors.New("database connection error"))
 			},
 			expectedError: true,
 			expectKind:    infra.KindDBFailure,
@@ -188,10 +188,10 @@ func TestRepository_Delete(t *testing.T) {
 		{
 			name: "error: review not found",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, id uuid.UUID, tx sqlc.DBTX) {
-				mock.EXPECT().DeleteReview(ctx, tx, id).Return(errors.New("no rows affected"))
+				mock.EXPECT().DeleteReview(ctx, tx, id).Return(int32(0), nil)
 			},
 			expectedError: true,
-			expectKind:    infra.KindDBFailure,
+			expectKind:    infra.KindNotFound,
 		},
 	}
 

@@ -13,8 +13,8 @@ import (
 
 type ReviewWriteQueries interface {
 	CreateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateReviewParams) (uuid.UUID, error)
-	UpdateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateReviewParams) error
-	DeleteReview(ctx context.Context, db sqlc.DBTX, id uuid.UUID) error
+	UpdateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateReviewParams) (int32, error)
+	DeleteReview(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (int32, error)
 }
 
 type ReviewRepository struct {
@@ -40,15 +40,23 @@ func (r *ReviewRepository) Create(ctx context.Context, tx sqlc.DBTX, rev *review
 
 func (r *ReviewRepository) Update(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID, rev *review.Review) error {
 	params := converter.ReviewToUpdateParams(reviewID, rev)
-	if err := r.queries.UpdateReview(ctx, tx, params); err != nil {
+	n, err := r.queries.UpdateReview(ctx, tx, params)
+	if err != nil {
 		return infra.WrapRepoErr("failed to update review", err)
+	}
+	if n == 0 {
+		return infra.WrapRepoErr("review not found", nil, infra.KindNotFound)
 	}
 	return nil
 }
 
 func (r *ReviewRepository) Delete(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID) error {
-	if err := r.queries.DeleteReview(ctx, tx, reviewID); err != nil {
+	n, err := r.queries.DeleteReview(ctx, tx, reviewID)
+	if err != nil {
 		return infra.WrapRepoErr("failed to delete review", err)
+	}
+	if n == 0 {
+		return infra.WrapRepoErr("review not found", nil, infra.KindNotFound)
 	}
 	return nil
 }

@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	reqdto "gin-clean-starter/internal/handler/dto/request"
 	resdto "gin-clean-starter/internal/handler/dto/response"
@@ -246,7 +248,9 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 	if after := c.Query("after"); after != "" {
 		cursor = &queries.Cursor{After: after}
 	}
-	items, next, err := h.q.ListByResource(c.Request.Context(), resourceID, queries.ReviewFilters{MinRating: minPtr, MaxRating: maxPtr}, cursor, limit)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	items, next, err := h.q.ListByResource(ctx, resourceID, queries.ReviewFilters{MinRating: minPtr, MaxRating: maxPtr}, cursor, limit)
 	if err != nil {
 		slog.Error("list reviews by resource failed", "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
@@ -291,7 +295,9 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 	if after := c.Query("after"); after != "" {
 		cursor = &queries.Cursor{After: after}
 	}
-	items, next, err := h.q.ListByUser(c.Request.Context(), userID, actorID, string(role), cursor, limit)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	items, next, err := h.q.ListByUser(ctx, userID, actorID, string(role), cursor, limit)
 	if err != nil {
 		slog.Warn("Access denied in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
 		httperr.AbortWithError(c, http.StatusForbidden, err, "Access denied", nil)

@@ -74,16 +74,18 @@ SET
   updated_at = NOW()
 WHERE resource_id = sqlc.arg(resource_id)::uuid;
 
--- name: UpdateReview :exec
+-- name: UpdateReview :one
 UPDATE reviews
 SET
     rating = $2,
     comment = $3,
     updated_at = NOW()
-WHERE id = $1;
+WHERE id = $1
+RETURNING 1;
 
--- name: DeleteReview :exec
-DELETE FROM reviews WHERE id = $1;
+-- name: DeleteReview :one
+DELETE FROM reviews WHERE id = $1
+RETURNING 1;
 
 -- name: GetReviewByID :one
 SELECT id, user_id, resource_id, reservation_id, rating, comment, created_at, updated_at FROM reviews WHERE id = $1;

@@ -58,11 +58,12 @@ func (mr *MockReviewWriteQueriesMockRecorder) CreateReview(ctx, db, arg any) *go
 }
 
 // DeleteReview mocks base method.
-func (m *MockReviewWriteQueries) DeleteReview(ctx context.Context, db sqlc.DBTX, id uuid.UUID) error {
+func (m *MockReviewWriteQueries) DeleteReview(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteReview", ctx, db, id)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeleteReview indicates an expected call of DeleteReview.
@@ -72,11 +73,12 @@ func (mr *MockReviewWriteQueriesMockRecorder) DeleteReview(ctx, db, id any) *gom
 }
 
 // UpdateReview mocks base method.
-func (m *MockReviewWriteQueries) UpdateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateReviewParams) error {
+func (m *MockReviewWriteQueries) UpdateReview(ctx context.Context, db sqlc.DBTX, arg sqlc.UpdateReviewParams) (int32, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateReview", ctx, db, arg)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateReview indicates an expected call of UpdateReview.
