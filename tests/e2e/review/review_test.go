@@ -516,85 +516,93 @@ func (s *ReviewSuite) TestListResourceReviews() {
 	s.Run("Normal case: Integration test (filter + pagination)", func() {
 		t := s.T()
 
-		resourceID := dbtest.CreateTestResource(t, s.DB, "Filter Test Resource", 60)
-		user1ID := dbtest.CreateTestUser(t, s.DB, "filter1@example.com", string(user.RoleAdmin))
-		user2ID := dbtest.CreateTestUser(t, s.DB, "filter2@example.com", string(user.RoleAdmin))
-		user3ID := dbtest.CreateTestUser(t, s.DB, "filter3@example.com", string(user.RoleAdmin))
-
-		now := time.Now()
-		reservation1ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user1ID,
-			now.Add(-4*time.Hour), now.Add(-3*time.Hour), "confirmed")
-		reservation2ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user2ID,
-			now.Add(-3*time.Hour), now.Add(-2*time.Hour), "confirmed")
-		reservation3ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user3ID,
-			now.Add(-2*time.Hour), now.Add(-1*time.Hour), "confirmed")
-
-		token1 := authtest.LoginUser(t, s.Router, "filter1@example.com", "password123")
-		token2 := authtest.LoginUser(t, s.Router, "filter2@example.com", "password123")
-		token3 := authtest.LoginUser(t, s.Router, "filter3@example.com", "password123")
-
-		// create 3 reviews
-		for _, rv := range []struct {
-			token   string
-			resID   uuid.UUID
-			rating  int
-			comment string
-		}{
-			{token1, reservation1ID, 5, "Excellent!"},
-			{token2, reservation2ID, 2, "Poor service"},
-			{token3, reservation3ID, 4, "Good service"},
-		} {
-			req := builder.NewReviewBuilder().
-				WithResourceID(resourceID).
-				WithReservationID(rv.resID).
-				WithRating(rv.rating).
-				WithComment(rv.comment).
-				BuildCreateRequestDTO()
-			resp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, req, rv.token)
-			require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+		type listTestCase struct {
+			name          string
+			queryParams   string
+			expectedCount int
+			validateFunc  func(t *testing.T, reviews []*response.ReviewListItemResponse)
 		}
 
-		// case: min_rating=4 -> expect 2
-		{
-			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?min_rating=4"
-			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
-			require.Equal(t, http.StatusOK, w.Code)
-			var out struct {
-				Reviews []*response.ReviewListItemResponse `json:"reviews"`
-			}
-			err := httptest.DecodeResponseBody(t, w.Body, &out)
-			require.NoError(t, err)
-			require.Len(t, out.Reviews, 2)
-			for _, r := range out.Reviews {
-				require.GreaterOrEqual(t, r.Rating, int32(4))
-			}
+		testCases := []listTestCase{
+			{
+				name:          "Filter by minimum rating",
+				queryParams:   "?min_rating=4",
+				expectedCount: 2,
+				validateFunc: func(t *testing.T, reviews []*response.ReviewListItemResponse) {
+					for _, review := range reviews {
+						require.GreaterOrEqual(t, review.Rating, int32(4))
+					}
+				},
+			},
+			{
+				name:          "Filter by maximum rating",
+				queryParams:   "?max_rating=3",
+				expectedCount: 1,
+				validateFunc: func(t *testing.T, reviews []*response.ReviewListItemResponse) {
+					require.Equal(t, int32(2), reviews[0].Rating)
+				},
+			},
+			{
+				name:          "Limit results",
+				queryParams:   "?limit=2",
+				expectedCount: 2,
+				validateFunc:  nil,
+			},
 		}
 
-		// case: max_rating=3 -> expect 1 (rating == 2)
-		{
-			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?max_rating=3"
-			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
-			require.Equal(t, http.StatusOK, w.Code)
-			var out struct {
-				Reviews []*response.ReviewListItemResponse `json:"reviews"`
-			}
-			err := httptest.DecodeResponseBody(t, w.Body, &out)
-			require.NoError(t, err)
-			require.Len(t, out.Reviews, 1)
-			require.Equal(t, int32(2), out.Reviews[0].Rating)
-		}
+		for _, tc := range testCases {
+			s.Run(tc.name, func() {
+				// fresh seed per case (DB reset runs between subtests)
+				resourceID := dbtest.CreateTestResource(t, s.DB, "Filter Test Resource", 60)
+				user1ID := dbtest.CreateTestUser(t, s.DB, "filter1@example.com", string(user.RoleAdmin))
+				user2ID := dbtest.CreateTestUser(t, s.DB, "filter2@example.com", string(user.RoleAdmin))
+				user3ID := dbtest.CreateTestUser(t, s.DB, "filter3@example.com", string(user.RoleAdmin))
 
-		// case: limit=2 -> expect 2
-		{
-			url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + "?limit=2"
-			w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
-			require.Equal(t, http.StatusOK, w.Code)
-			var out struct {
-				Reviews []*response.ReviewListItemResponse `json:"reviews"`
-			}
-			err := httptest.DecodeResponseBody(t, w.Body, &out)
-			require.NoError(t, err)
-			require.Len(t, out.Reviews, 2)
+				now := time.Now()
+				reservation1ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user1ID,
+					now.Add(-4*time.Hour), now.Add(-3*time.Hour), "confirmed")
+				reservation2ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user2ID,
+					now.Add(-3*time.Hour), now.Add(-2*time.Hour), "confirmed")
+				reservation3ID := dbtest.CreateTestReservation(t, s.DB, resourceID, user3ID,
+					now.Add(-2*time.Hour), now.Add(-1*time.Hour), "confirmed")
+
+				token1 := authtest.LoginUser(t, s.Router, "filter1@example.com", "password123")
+				token2 := authtest.LoginUser(t, s.Router, "filter2@example.com", "password123")
+				token3 := authtest.LoginUser(t, s.Router, "filter3@example.com", "password123")
+
+				for _, rv := range []struct {
+					token   string
+					resID   uuid.UUID
+					rating  int
+					comment string
+				}{
+					{token1, reservation1ID, 5, "Excellent!"},
+					{token2, reservation2ID, 2, "Poor service"},
+					{token3, reservation3ID, 4, "Good service"},
+				} {
+					req := builder.NewReviewBuilder().
+						WithResourceID(resourceID).
+						WithReservationID(rv.resID).
+						WithRating(rv.rating).
+						WithComment(rv.comment).
+						BuildCreateRequestDTO()
+					resp := httptest.PerformRequest(t, s.Router, http.MethodPost, reviewsURL, req, rv.token)
+					require.Equal(t, http.StatusCreated, resp.Code, resp.Body.String())
+				}
+
+				url := fmt.Sprintf(resourceReviewsURL, resourceID.String()) + tc.queryParams
+				w := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, "")
+				require.Equal(t, http.StatusOK, w.Code)
+				var actualRes struct {
+					Reviews []*response.ReviewListItemResponse `json:"reviews"`
+				}
+				err := httptest.DecodeResponseBody(t, w.Body, &actualRes)
+				require.NoError(t, err)
+				require.Len(t, actualRes.Reviews, tc.expectedCount)
+				if tc.validateFunc != nil {
+					tc.validateFunc(t, actualRes.Reviews)
+				}
+			})
 		}
 	})
 }
