@@ -5,6 +5,7 @@ import (
 
 	"gin-clean-starter/internal/infra"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
+	"gin-clean-starter/internal/pkg/pgconv"
 
 	"github.com/google/uuid"
 )
@@ -30,7 +31,7 @@ func NewRatingStatsRepository(queries RatingStatsQueries, db sqlc.DBTX) *RatingS
 func (r *RatingStatsRepository) ApplyOnCreate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, rating int) error {
 	if err := r.queries.ApplyResourceRatingStatsOnCreate(ctx, tx, sqlc.ApplyResourceRatingStatsOnCreateParams{
 		ResourceID: resourceID,
-		Rating:     int32(rating),
+		Rating:     pgconv.IntToInt32(rating),
 	}); err != nil {
 		return infra.WrapRepoErr("failed to apply rating stats on create", err)
 	}
@@ -40,8 +41,8 @@ func (r *RatingStatsRepository) ApplyOnCreate(ctx context.Context, tx sqlc.DBTX,
 func (r *RatingStatsRepository) ApplyOnUpdate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating, newRating int) error {
 	if err := r.queries.ApplyResourceRatingStatsOnUpdate(ctx, tx, sqlc.ApplyResourceRatingStatsOnUpdateParams{
 		ResourceID: resourceID,
-		OldRating:  int32(oldRating),
-		NewRating:  int32(newRating),
+		OldRating:  pgconv.IntToInt32(oldRating),
+		NewRating:  pgconv.IntToInt32(newRating),
 	}); err != nil {
 		return infra.WrapRepoErr("failed to apply rating stats on update", err)
 	}
@@ -51,7 +52,7 @@ func (r *RatingStatsRepository) ApplyOnUpdate(ctx context.Context, tx sqlc.DBTX,
 func (r *RatingStatsRepository) ApplyOnDelete(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating int) error {
 	if err := r.queries.ApplyResourceRatingStatsOnDelete(ctx, tx, sqlc.ApplyResourceRatingStatsOnDeleteParams{
 		ResourceID: resourceID,
-		Rating:     int32(oldRating),
+		Rating:     pgconv.IntToInt32(oldRating),
 	}); err != nil {
 		return infra.WrapRepoErr("failed to apply rating stats on delete", err)
 	}

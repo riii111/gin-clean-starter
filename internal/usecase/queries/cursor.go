@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"gin-clean-starter/internal/pkg/pgconv"
+
 	"github.com/google/uuid"
 )
 
@@ -97,6 +99,5 @@ func ValidateLimit(limit int) int {
 // ValidateLimit is applied internally to clamp values to a safe range.
 func ToPgFetchLimit(limit int) int32 {
 	l := ValidateLimit(limit)
-	// MaxListLimit keeps this safely within int32
-	return int32(l + 1)
+	return pgconv.IntToInt32(l + 1)
 }
