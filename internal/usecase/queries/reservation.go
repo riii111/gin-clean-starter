@@ -3,7 +3,6 @@ package queries
 import (
 	"context"
 	"fmt"
-	"math"
 	"time"
 
 	"gin-clean-starter/internal/infra"
@@ -38,11 +37,11 @@ type ReservationReadStore interface {
 }
 
 type reservationQueriesImpl struct {
-	repo ReservationReadStore
+	rs ReservationReadStore
 }
 
 func NewReservationQueries(repo ReservationReadStore) ReservationQueries {
-	return &reservationQueriesImpl{repo: repo}
+	return &reservationQueriesImpl{rs: repo}
 }
 
 func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, id uuid.UUID) (*ReservationView, error) {
@@ -50,7 +49,7 @@ func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, i
 }
 
 func (q *reservationQueriesImpl) GetByIDWithRole(ctx context.Context, actorID uuid.UUID, actorRole string, id uuid.UUID) (*ReservationView, error) {
-	reservation, err := q.repo.FindByID(ctx, id)
+	reservation, err := q.rs.FindByID(ctx, id)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, errs.Mark(err, ErrReservationNotFound)
@@ -72,21 +71,13 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 	var err error
 
 	if after == nil || after.After == "" {
-		if limit+1 > math.MaxInt32 {
-			return nil, nil, errs.New("limit too large")
-		}
-		// #nosec G115 -- limit is validated to be within int32 range above
-		rows, err = q.repo.FindByUserIDFirstPage(ctx, userID, int32(limit+1))
+		rows, err = q.rs.FindByUserIDFirstPage(ctx, userID, ToPgFetchLimit(limit))
 	} else {
 		lastCreatedAt, lastID, decodeErr := DecodeAfterCursor(after.After)
 		if decodeErr != nil {
 			return nil, nil, errs.Mark(decodeErr, ErrInvalidCursor)
 		}
-		if limit+1 > math.MaxInt32 {
-			return nil, nil, errs.New("limit too large")
-		}
-		// #nosec G115 -- limit is validated to be within int32 range above
-		rows, err = q.repo.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, int32(limit+1))
+		rows, err = q.rs.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
 	}
 
 	if err != nil {

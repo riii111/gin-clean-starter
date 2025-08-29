@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"gin-clean-starter/internal/pkg/pgconv"
+
 	"github.com/google/uuid"
 )
 
@@ -83,6 +85,7 @@ type Cursor struct {
 	After string `json:"after,omitempty"`
 }
 
+// Normalize page size (default/max) for consistent reads.
 func ValidateLimit(limit int) int {
 	if limit <= 0 {
 		return 20 // default limit
@@ -91,4 +94,10 @@ func ValidateLimit(limit int) int {
 		return MaxListLimit
 	}
 	return limit
+}
+
+// Use limit+1 fetch to detect next page consistently.
+func ToPgFetchLimit(limit int) int32 {
+	l := ValidateLimit(limit)
+	return pgconv.IntToInt32(l + 1)
 }

@@ -1,0 +1,379 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"time"
+
+	reqdto "gin-clean-starter/internal/handler/dto/request"
+	resdto "gin-clean-starter/internal/handler/dto/response"
+	"gin-clean-starter/internal/handler/httperr"
+	"gin-clean-starter/internal/handler/middleware"
+	"gin-clean-starter/internal/infra"
+	"gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/usecase/commands"
+	"gin-clean-starter/internal/usecase/queries"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+var (
+	ErrUserNotAuthenticated = errs.New("user not authenticated")
+)
+
+type ReviewHandler struct {
+	cmds commands.ReviewCommands
+	q    queries.ReviewQueries
+}
+
+func NewReviewHandler(cmds commands.ReviewCommands, q queries.ReviewQueries) *ReviewHandler {
+	return &ReviewHandler{cmds: cmds, q: q}
+}
+
+// @Summary Create review
+// @Description Create a new review for a completed reservation
+// @Tags reviews
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body request.CreateReviewRequest true "Create review request"
+// @Success 201 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /reviews [post]
+func (h *ReviewHandler) Create(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		// This error should not occur since authentication check has passed
+		slog.Error("user_id not found")
+		httperr.AbortWithError(c, http.StatusInternalServerError, ErrUserNotAuthenticated, "Internal error", nil)
+		return
+	}
+
+	var req reqdto.CreateReviewRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		slog.Info("Invalid request format in create review", "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	result, err := h.cmds.Create(ctx, req, userID)
+	if err != nil {
+		switch {
+		case infra.IsKind(err, infra.KindDuplicateKey):
+			slog.Info("Duplicate review", "user_id", userID, "error", err.Error())
+			httperr.AbortWithError(c, http.StatusConflict, err, "Review already exists for this reservation", nil)
+			return
+		case errors.Is(err, commands.ErrDomainValidationFailed):
+			slog.Info("Invalid review data", "user_id", userID, "error", err.Error())
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
+			return
+		default:
+			slog.Error("Unexpected error", "user_id", userID, "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+			return
+		}
+	}
+
+	c.Header("Location", "/reviews/"+result.ReviewID.String())
+	c.JSON(http.StatusCreated, gin.H{"id": result.ReviewID.String()})
+}
+
+// @Summary Get review
+// @Description Get a review by ID
+// @Tags reviews
+// @Produce json
+// @Param id path string true "Review ID"
+// @Success 200 {object} response.ReviewResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /reviews/{id} [get]
+func (h *ReviewHandler) Get(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid review ID format in get", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	view, err := h.q.GetByID(ctx, id)
+	if err != nil {
+		switch {
+		case errors.Is(err, queries.ErrReviewNotFound):
+			slog.Info("Review not found", "review_id", id, "error", err.Error())
+			httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
+			return
+		default:
+			slog.Error("Failed to get review", "review_id", id, "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+			return
+		}
+	}
+	c.JSON(http.StatusOK, resdto.FromReviewView(view))
+}
+
+// @Summary Update review
+// @Description Update own review by ID
+// @Tags reviews
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Review ID"
+// @Param request body request.UpdateReviewRequest true "Update review request"
+// @Success 204 "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /reviews/{id} [put]
+func (h *ReviewHandler) Update(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid review ID format in update", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
+		return
+	}
+
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		// This error should not occur since authentication check has passed
+		slog.Error("user_id not found")
+		httperr.AbortWithError(c, http.StatusInternalServerError, ErrUserNotAuthenticated, "Internal error", nil)
+		return
+	}
+
+	var req reqdto.UpdateReviewRequest
+	if bindErr := c.ShouldBindJSON(&req); bindErr != nil {
+		slog.Info("Invalid request format in update review", "error", bindErr.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, "Invalid request", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	if err = h.cmds.Update(ctx, id, req, userID); err != nil {
+		slog.Info("Update review command failed", "review_id", id, "user_id", userID, "error", err.Error())
+		switch {
+		case errors.Is(err, commands.ErrReviewNotOwned):
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Forbidden", nil)
+			return
+		case errors.Is(err, commands.ErrReviewNotFoundWrite):
+			httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
+			return
+		case errors.Is(err, commands.ErrDomainValidationFailed):
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid request", nil)
+			return
+		default:
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Update failed", nil)
+			return
+		}
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary Delete review
+// @Description Delete own review (admins can delete any)
+// @Tags reviews
+// @Security BearerAuth
+// @Param id path string true "Review ID"
+// @Success 204 "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /reviews/{id} [delete]
+func (h *ReviewHandler) Delete(c *gin.Context) {
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid review ID format in delete", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
+		return
+	}
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		// This error should not occur since authentication check has passed
+		slog.Error("user_id not found")
+		httperr.AbortWithError(c, http.StatusInternalServerError, ErrUserNotAuthenticated, "Internal error", nil)
+		return
+	}
+	role, _ := middleware.GetUserRole(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.cmds.Delete(ctx, id, userID, string(role)); err != nil {
+		slog.Info("Delete review command failed", "review_id", id, "user_id", userID, "role", string(role), "error", err.Error())
+		switch {
+		case errors.Is(err, commands.ErrReviewNotOwned):
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Forbidden", nil)
+			return
+		case errors.Is(err, commands.ErrReviewNotFoundWrite):
+			httperr.AbortWithError(c, http.StatusNotFound, err, "Not found", nil)
+			return
+		default:
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Delete failed", nil)
+			return
+		}
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// @Summary List resource reviews
+// @Description List reviews for a resource with optional rating filters and keyset pagination
+// @Tags reviews
+// @Produce json
+// @Param id path string true "Resource ID"
+// @Param min_rating query int false "Minimum rating (1-5)"
+// @Param max_rating query int false "Maximum rating (1-5)"
+// @Param limit query int false "Max items (default 20)"
+// @Param after query string false "Cursor for keyset pagination"
+// @Success 200 {array} response.ReviewListItemResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /resources/{id}/reviews [get]
+func (h *ReviewHandler) ListByResource(c *gin.Context) {
+	resourceID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid resource ID format in list reviews", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid resource id", nil)
+		return
+	}
+	var minPtr, maxPtr *int
+	if v := c.Query("min_rating"); v != "" {
+		if iv, e := strconv.Atoi(v); e == nil {
+			minPtr = &iv
+		}
+	}
+	if v := c.Query("max_rating"); v != "" {
+		if iv, e := strconv.Atoi(v); e == nil {
+			maxPtr = &iv
+		}
+	}
+	// Validate rating range consistency if both provided
+	if minPtr != nil && maxPtr != nil && *minPtr > *maxPtr {
+		slog.Info("Invalid rating range: min greater than max", "min", *minPtr, "max", *maxPtr)
+		httperr.AbortWithError(c, http.StatusBadRequest, errors.New("invalid rating range"), "Invalid rating range", nil)
+		return
+	}
+
+	// Common list params
+	limit, cursor := parseListParams(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	items, next, err := h.q.ListByResource(ctx, resourceID, queries.ReviewFilters{MinRating: minPtr, MaxRating: maxPtr}, cursor, limit)
+	if err != nil {
+		switch {
+		case errors.Is(err, queries.ErrInvalidCursorQuery):
+			slog.Info("invalid cursor in list reviews by resource", "error", err.Error())
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid cursor", nil)
+		default:
+			slog.Error("list reviews by resource failed", "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+		}
+		return
+	}
+	resp := gin.H{"reviews": resdto.FromReviewList(items)}
+	if next != nil {
+		resp["next_cursor"] = next.After
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// @Summary List user reviews
+// @Description List reviews posted by a user (viewer can only access own)
+// @Tags reviews
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "User ID"
+// @Param limit query int false "Max items (default 20)"
+// @Param after query string false "Cursor for keyset pagination"
+// @Success 200 {array} response.ReviewListItemResponse
+// @Failure 400 {object} map[string]string
+// @Failure 401 {object} map[string]string
+// @Failure 403 {object} map[string]string
+// @Router /users/{id}/reviews [get]
+func (h *ReviewHandler) ListByUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid user ID format in list user reviews", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid user id", nil)
+		return
+	}
+	actorID, _ := middleware.GetUserID(c)
+	role, _ := middleware.GetUserRole(c)
+	// Common list params
+	limit, cursor := parseListParams(c)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	items, next, err := h.q.ListByUser(ctx, userID, actorID, string(role), cursor, limit)
+	if err != nil {
+		switch {
+		case errors.Is(err, queries.ErrReviewAccess):
+			slog.Info("Access denied in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Access denied", nil)
+		case errors.Is(err, queries.ErrInvalidCursorQuery):
+			slog.Info("Invalid cursor in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid cursor", nil)
+		default:
+			slog.Error("List user reviews failed", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+		}
+		return
+	}
+	resp := gin.H{"reviews": resdto.FromReviewList(items)}
+	if next != nil {
+		resp["next_cursor"] = next.After
+	}
+	c.JSON(http.StatusOK, resp)
+}
+
+// @Summary Resource rating stats
+// @Description Get rating statistics for a resource
+// @Tags reviews
+// @Produce json
+// @Param id path string true "Resource ID"
+// @Success 200 {object} response.ResourceRatingStatsResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /resources/{id}/rating-stats [get]
+func (h *ReviewHandler) ResourceRatingStats(c *gin.Context) {
+	resourceID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		slog.Info("Invalid resource ID format in get rating stats", "id", c.Param("id"), "error", err.Error())
+		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid resource id", nil)
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	stats, err := h.q.GetResourceRatingStats(ctx, resourceID)
+	if err != nil {
+		slog.Error("Failed to get resource rating stats", "resource_id", resourceID, "error", err.Error())
+		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to get stats", nil)
+		return
+	}
+	c.JSON(http.StatusOK, resdto.FromResourceRatingStats(stats))
+}
+
+// parses common list parameters such as limit and after cursor.
+func parseListParams(c *gin.Context) (int, *queries.Cursor) {
+	// Default limit; queries side also validates.
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if iv, e := strconv.Atoi(v); e == nil {
+			limit = iv
+		}
+	}
+	// Pass raw cursor; queries decode (single source of truth).
+	var cursor *queries.Cursor
+	if after := c.Query("after"); after != "" {
+		cursor = &queries.Cursor{After: after}
+	}
+	return limit, cursor
+}

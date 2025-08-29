@@ -66,12 +66,35 @@ type Reservations struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+type ResourceRatingStats struct {
+	ResourceID    uuid.UUID          `json:"resource_id"`
+	TotalReviews  int32              `json:"total_reviews"`
+	AverageRating pgtype.Numeric     `json:"average_rating"`
+	Rating1Count  int32              `json:"rating_1_count"`
+	Rating2Count  int32              `json:"rating_2_count"`
+	Rating3Count  int32              `json:"rating_3_count"`
+	Rating4Count  int32              `json:"rating_4_count"`
+	Rating5Count  int32              `json:"rating_5_count"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Resources struct {
 	ID          uuid.UUID          `json:"id"`
 	Name        string             `json:"name"`
 	LeadTimeMin int32              `json:"lead_time_min"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type Reviews struct {
+	ID            uuid.UUID          `json:"id"`
+	UserID        uuid.UUID          `json:"user_id"`
+	ResourceID    uuid.UUID          `json:"resource_id"`
+	ReservationID uuid.UUID          `json:"reservation_id"`
+	Rating        int32              `json:"rating"`
+	Comment       string             `json:"comment"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Users struct {

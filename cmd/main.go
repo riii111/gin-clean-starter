@@ -13,7 +13,7 @@ import (
 )
 
 func init() {
-	// 設定ミスでもデバッグ情報を公開しない（フェイルセーフ）
+	// Do not expose debug information even if misconfigured (fail-safe)
 	gin.SetMode(gin.ReleaseMode)
 
 	if mode := os.Getenv("GIN_MODE"); mode != "" {
@@ -21,29 +21,28 @@ func init() {
 	}
 }
 
-// @title           gin-clean-starter
+// @title           Gin Clean Starter
 // @version         1.0
-// @description
-// @description
-
+// @description     JWT Authorization header using the Bearer scheme
 // @BasePath  /
 // @schemes http https
-// @in header
+// @in header      Authorization
+// @name          Authorization
 func startServer(lc fx.Lifecycle, engine *gin.Engine, cfg config.Config, logger *slog.Logger) {
 	lc.Append(fx.Hook{
 		OnStart: func(_ context.Context) error {
 			gin.EnableJsonDecoderDisallowUnknownFields()
 			listenAddr := ":" + cfg.Server.Port
-			logger.Info("🚀 サーバーを起動します", "address", listenAddr, "mode", gin.Mode())
+			logger.Info("🚀 Starting server", "address", listenAddr, "mode", gin.Mode())
 			go func() {
 				if err := engine.Run(listenAddr); err != nil {
-					logger.Error("サーバーの起動に失敗しました", "error", err)
+					logger.Error("Failed to start server", "error", err)
 				}
 			}()
 			return nil
 		},
 		OnStop: func(_ context.Context) error {
-			logger.Info("🛑 サーバーを停止します")
+			logger.Info("🛑 Stopping server")
 			return nil
 		},
 	})
@@ -63,16 +62,16 @@ func main() {
 	)
 
 	if err := app.Start(context.Background()); err != nil {
-		slog.Error("アプリケーションの起動に失敗しました", "error", err.Error())
+		slog.Error("Failed to start application", "error", err.Error())
 		os.Exit(1)
 	}
 
 	<-app.Done()
 
 	if err := app.Stop(context.Background()); err != nil {
-		slog.Error("アプリケーションの停止に失敗しました", "error", err.Error())
-		// Djangoと同様、Exitしない
+		slog.Error("Failed to stop application", "error", err.Error())
+		// don't exit
 	}
 
-	slog.Info("アプリケーションが正常に停止しました")
+	slog.Info("Application stopped successfully")
 }

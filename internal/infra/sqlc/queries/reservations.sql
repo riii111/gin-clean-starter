@@ -9,14 +9,14 @@ INSERT INTO reservations (
     note
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) RETURNING *;
+) RETURNING id;
 
 -- name: GetReservationByID :one
 SELECT 
     r.id,
     r.resource_id,
     r.user_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.coupon_id,
@@ -51,7 +51,7 @@ WHERE id = $1;
 SELECT 
     r.id,
     r.resource_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.created_at,
@@ -66,7 +66,7 @@ LIMIT $2;
 SELECT 
     r.id,
     r.resource_id,
-    r.slot,
+    r.slot::text,
     r.status,
     r.price_cents,
     r.created_at,

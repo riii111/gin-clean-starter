@@ -25,9 +25,9 @@ func (m *MockUserWriteQueries) UpdateUserLastLogin(ctx context.Context, db sqlc.
 	return args.Error(0)
 }
 
-func (m *MockUserWriteQueries) CreateUser(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateUserParams) (sqlc.CreateUserRow, error) {
+func (m *MockUserWriteQueries) CreateUser(ctx context.Context, db sqlc.DBTX, arg sqlc.CreateUserParams) (uuid.UUID, error) {
 	args := m.Called(ctx, db, arg)
-	return args.Get(0).(sqlc.CreateUserRow), args.Error(1)
+	return args.Get(0).(uuid.UUID), args.Error(1)
 }
 
 // sqlc.DBTX implementation for MockUserWriteQueries

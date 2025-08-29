@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/domain/reservation"
+	"gin-clean-starter/internal/domain/review"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 
 	"github.com/google/uuid"
@@ -23,6 +24,8 @@ type UnitOfWork interface {
 
 type Tx interface {
 	Reservations() ReservationRepository
+	Reviews() ReviewRepository
+	RatingStats() RatingStatsRepository
 	Idempotency() IdempotencyRepository
 	Notifications() NotificationRepository
 	Users() UserRepository
@@ -35,6 +38,7 @@ type CommandReads interface {
 	CouponByCode(ctx context.Context, code string) (*CouponSnapshot, error)
 	ReservationByID(ctx context.Context, id uuid.UUID) (*ReservationSnapshot, error)
 	IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*IdempotencyRecord, error)
+	ReviewByID(ctx context.Context, id uuid.UUID) (*ReviewSnapshot, error)
 }
 
 // Minimal snapshot for command read operations
@@ -43,10 +47,23 @@ type ReservationSnapshot struct {
 	ResourceID uuid.UUID
 	UserID     uuid.UUID
 	Status     string
+	EndTime    time.Time
 }
 
 type ReservationRepository interface {
 	Create(ctx context.Context, tx sqlc.DBTX, res *reservation.Reservation) (uuid.UUID, error)
+}
+
+type ReviewRepository interface {
+	Create(ctx context.Context, tx sqlc.DBTX, rev *review.Review) (uuid.UUID, error)
+	Update(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID, rev *review.Review) error
+	Delete(ctx context.Context, tx sqlc.DBTX, reviewID uuid.UUID) error
+}
+
+type RatingStatsRepository interface {
+	ApplyOnCreate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, rating int) error
+	ApplyOnUpdate(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating, newRating int) error
+	ApplyOnDelete(ctx context.Context, tx sqlc.DBTX, resourceID uuid.UUID, oldRating int) error
 }
 
 type IdempotencyRepository interface {

@@ -3,6 +3,7 @@ package pgconv
 import (
 	"database/sql"
 	"errors"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,7 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var ErrInvalidFloat64Value = errors.New("invalid float64 value in pgtype.Float8")
+var (
+	ErrInvalidFloat64Value = errors.New("invalid float64 value in pgtype.Float8")
+	ErrIntOverflow         = errors.New("integer overflow during conversion to int32")
+)
 
 func UUIDPtrFromPgtype(pu pgtype.UUID) *uuid.UUID {
 	if !pu.Valid {
@@ -90,7 +94,27 @@ func TimeToPgtype(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
-// IsNoRows checks if the error is a "no rows" error from either sql or pgx
+func SafeIntToInt32(v int) (int32, error) {
+	if v > math.MaxInt32 || v < math.MinInt32 {
+		return 0, ErrIntOverflow
+	}
+	return int32(v), nil
+}
+
+func SafeIntPtrToInt32(v *int, defaultValue int32) (int32, error) {
+	if v == nil {
+		return defaultValue, nil
+	}
+	return SafeIntToInt32(*v)
+}
+
+func IntToInt32(v int) int32 {
+	if v > math.MaxInt32 || v < math.MinInt32 {
+		panic("unexpected integer overflow during int to int32 conversion")
+	}
+	return int32(v)
+}
+
 func IsNoRows(err error) bool {
 	return errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows)
 }

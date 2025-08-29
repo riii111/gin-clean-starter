@@ -28,11 +28,12 @@ func ErrorHandler() gin.HandlerFunc {
 				}
 			}
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": gin.H{
-				"message": "Internal server error",
-			},
-		})
+		if status := c.Writer.Status(); status != http.StatusOK {
+			c.Status(status)
+			c.Writer.WriteHeaderNow()
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": "Internal server error"}})
 	}
 }
 

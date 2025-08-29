@@ -39,8 +39,8 @@ func NewAuthHandler(authCommands commands.AuthCommands, userQueries queries.User
 // @Tags auth
 // @Accept json
 // @Produce json
-// @Param request body reqdto.LoginRequest true "Login request"
-// @Success 200 {object} resdto.LoginResponse
+// @Param request body request.LoginRequest true "Login request"
+// @Success 200 {object} response.LoginResponse
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Router /auth/login [post]
@@ -53,26 +53,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	credentials, err := req.ToDomain()
-	if err != nil {
-		slog.Warn("Invalid request data in login", "error", err.Error())
-		httperr.AbortWithError(c, http.StatusBadRequest, err,
-			"Invalid request data", nil)
-		return
-	}
-
 	result, err := h.authCommands.Login(c.Request.Context(), req)
 	if err != nil {
 		switch {
 		case errors.Is(err, commands.ErrInvalidCredentials),
 			errors.Is(err, commands.ErrUserNotFound):
 			slog.Warn("Login failed due to invalid credentials",
-				"email", credentials.Email(), "error", err.Error())
+				"email", req.Email, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusUnauthorized, err,
 				"Invalid email or password", nil)
 		case errors.Is(err, commands.ErrUserInactive):
 			slog.Warn("Login failed due to inactive user",
-				"email", credentials.Email(), "error", err.Error())
+				"email", req.Email, "error", err.Error())
 			httperr.AbortWithError(c, http.StatusForbidden, err,
 				"Account is inactive", nil)
 		default:
@@ -85,7 +77,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	user, err := h.userQueries.GetCurrentUser(c.Request.Context(), result.UserID)
 	if err != nil {
-		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err)
+		slog.Error("Failed to retrieve user data after successful login", "user_id", result.UserID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err,
 			"Internal server error", nil)
 		return
@@ -156,7 +148,7 @@ func (h *AuthHandler) Me(c *gin.Context) {
 // @Description Refresh access token using refresh token from cookie
 // @Tags auth
 // @Produce json
-// @Success 200 {object} gin.H
+// @Success 200 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Router /auth/refresh [post]
 func (h *AuthHandler) Refresh(c *gin.Context) {

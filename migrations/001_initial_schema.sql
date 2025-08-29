@@ -108,17 +108,17 @@ INSERT INTO companies (id, name) VALUES
     (gen_random_uuid(), 'Test Company');
 
 -- Insert test users (password: 'password123' for all)
-INSERT INTO users (email, password_hash, role, company_id) 
-SELECT 
-    email,
+INSERT INTO users (email, password_hash, role, company_id)
+SELECT
+    tu.email,
     '$2a$12$uhAjVE9f92IGYv3E25pJNetg.27lVt0p7jmLWjqjmhOg92ldPS0A.' AS password_hash, -- bcrypt hash of password123
-    role,
+    tu.role,
     companies.id AS company_id
-FROM companies 
+FROM companies
 CROSS JOIN (
-    VALUES 
+    VALUES
         ('test@example.com', 'admin'),
         ('admin@example.com', 'admin'),
         ('viewer2@example.com', 'viewer')
-) AS test_users(email, role)
+) AS tu(email, role)
 WHERE companies.name = 'Default Company';

@@ -15,7 +15,7 @@ import (
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (email, password_hash, role, company_id, is_active)
 VALUES ($1, $2, $3, $4, true)
-RETURNING id, email, role, company_id, last_login, is_active, created_at, updated_at
+RETURNING id
 `
 
 type CreateUserParams struct {
@@ -25,36 +25,16 @@ type CreateUserParams struct {
 	CompanyID    pgtype.UUID `json:"company_id"`
 }
 
-type CreateUserRow struct {
-	ID        uuid.UUID          `json:"id"`
-	Email     string             `json:"email"`
-	Role      string             `json:"role"`
-	CompanyID pgtype.UUID        `json:"company_id"`
-	LastLogin pgtype.Timestamptz `json:"last_login"`
-	IsActive  bool               `json:"is_active"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, db DBTX, arg CreateUserParams) (CreateUserRow, error) {
+func (q *Queries) CreateUser(ctx context.Context, db DBTX, arg CreateUserParams) (uuid.UUID, error) {
 	row := db.QueryRow(ctx, createUser,
 		arg.Email,
 		arg.PasswordHash,
 		arg.Role,
 		arg.CompanyID,
 	)
-	var i CreateUserRow
-	err := row.Scan(
-		&i.ID,
-		&i.Email,
-		&i.Role,
-		&i.CompanyID,
-		&i.LastLogin,
-		&i.IsActive,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const findUserByEmail = `-- name: FindUserByEmail :one

@@ -181,6 +181,7 @@ func applyMigrations(t *testing.T, dbConfig config.DBConfig) error {
 
 	migrationFiles := []string{
 		"migrations/001_initial_schema.sql",
+		"migrations/002_review_schema.sql",
 	}
 
 	for _, file := range migrationFiles {

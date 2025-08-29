@@ -14,14 +14,14 @@ import (
 var RepositoryModule = fx.Module("repository",
 	fx.Provide(
 		NewSQLQueries, // Provide *sqlc.Queries for UnitOfWork
-		fx.Annotate(
-			NewSQLQueries,
-			fx.As(new(readstore.UserReadQueries)), // Also provide as interface for UserReadStore
-		),
 		NewDBTX,
 		fx.Annotate(
 			uow.NewPostgresUoW,
 			fx.As(new(shared.UnitOfWork)),
+		),
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.UserReadQueries)),
 		),
 		fx.Annotate(
 			readstore.NewUserReadStore,
@@ -31,7 +31,16 @@ var RepositoryModule = fx.Module("repository",
 			readstore.NewReservationReadStore,
 			fx.As(new(queries.ReservationReadStore)),
 		),
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.ReviewReadQueries)),
+		),
+		fx.Annotate(
+			readstore.NewReviewReadStore,
+			fx.As(new(queries.ReviewReadStore)),
+		),
 		queries.NewReservationQueries,
+		queries.NewReviewQueries,
 	),
 )
 
