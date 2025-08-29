@@ -17,7 +17,6 @@ var (
 
 type UserQueries interface {
 	GetCurrentUser(ctx context.Context, userID uuid.UUID) (*AuthorizedUserView, error)
-	GetUserByID(ctx context.Context, actorID uuid.UUID, actorRole string, targetID uuid.UUID) (*AuthorizedUserView, error)
 }
 
 type UserReadStore interface {
@@ -49,37 +48,4 @@ func (q *userQueriesImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) 
 	}
 
 	return user, nil
-}
-
-func (q *userQueriesImpl) GetUserByID(ctx context.Context, actorID uuid.UUID, actorRole string, targetID uuid.UUID) (*AuthorizedUserView, error) {
-	user, err := q.readStore.FindByID(ctx, targetID)
-	if err != nil {
-		if infra.IsKind(err, infra.KindNotFound) {
-			return nil, ErrUserNotFound
-		}
-		return nil, err
-	}
-
-	if !canAccessUser(actorID, actorRole, targetID, user.IsActive) {
-		return nil, ErrUserAccess
-	}
-
-	return user, nil
-}
-
-func canAccessUser(actorID uuid.UUID, actorRole string, targetID uuid.UUID, userIsActive bool) bool {
-	if actorID == targetID {
-		return true
-	}
-
-	if actorRole == RoleAdmin {
-		return true
-	}
-
-	// TODO: Implement company-based access control for operators
-	if actorRole == RoleOperator {
-		return userIsActive // Operators can only access active users
-	}
-
-	return false
 }
