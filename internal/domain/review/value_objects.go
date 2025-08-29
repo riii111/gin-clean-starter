@@ -3,6 +3,14 @@ package review
 import (
 	"strings"
 	"unicode/utf8"
+
+	"gin-clean-starter/internal/pkg/errs"
+)
+
+var (
+	ErrInvalidRating  = errs.New("rating must be between 1 and 5")
+	ErrEmptyComment   = errs.New("comment cannot be empty")
+	ErrCommentTooLong = errs.New("comment exceeds maximum length")
 )
 
 const MaxCommentLength = 1000

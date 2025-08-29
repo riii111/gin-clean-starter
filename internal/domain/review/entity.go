@@ -3,7 +3,13 @@ package review
 import (
 	"time"
 
+	"gin-clean-starter/internal/pkg/errs"
 	"github.com/google/uuid"
+)
+
+var (
+	ErrReservationNotEligible = errs.New("reservation is not eligible for review")
+	ErrReviewAlreadyExists    = errs.New("review already exists for this reservation")
 )
 
 type Review struct {
