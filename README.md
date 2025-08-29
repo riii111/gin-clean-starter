@@ -107,6 +107,10 @@ curl -X POST localhost:8888/reservations \
 
 Swagger docs: `http://localhost:8888/swagger/` (debug mode)
 
+### API Conventions
+- Cursor format: keyset pagination uses Base64URL cursor `v1:<created_at_unix_micro>-<uuid>` encoded as Base64URL. Invalid cursor → 400.
+- Errors: map infrastructure/usecase errors to HTTP codes consistently — 400 (invalid input), 401 (unauthorized), 403 (forbidden), 404 (not found), 409 (conflict), 500 (internal error).
+
 ---
 
 ## 🏗️ Architecture

@@ -3,9 +3,7 @@
 package api_test
 
 import (
-	"encoding/json"
 	"errors"
-	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -47,14 +45,13 @@ func (s *ReviewHandlerTestSuite) SetupTest() {
 
 	// Mock authentication middleware for testing
 	authMiddleware := func(c *gin.Context) {
-		if authHeader := c.GetHeader("Authorization"); authHeader != "" {
-			// Extract userID from token (mock behavior)
-			userID := uuid.New()
-			role := user.RoleViewer
-			c.Set("user_id", userID)
-			c.Set("user_role", role)
+		if c.GetHeader("Authorization") == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": gin.H{"message": "Unauthorized"}})
+			return
 		}
-		// For unauthenticated requests, don't set any context values
+		// Mock authenticated user
+		c.Set("user_id", uuid.New())
+		c.Set("user_role", user.RoleViewer)
 		c.Next()
 	}
 
@@ -94,67 +91,52 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 	returnView := builder.NewReviewBuilder().BuildViewQuery()
 	expectedResult := &commands.CreateReviewResult{ReviewID: returnView.ID}
 
-	// Calculate total successful cases (normal + validation success cases)
+	// Validation boundary cases
 	bound := []testCaseReview{
-		{name: "Rating境界値OK(1)", mutate: testutil.Field("rating", 1), expectCode: http.StatusCreated},
-		{name: "Rating境界値OK(5)", mutate: testutil.Field("rating", 5), expectCode: http.StatusCreated},
-		{name: "Rating境界値NG(0)", mutate: testutil.Field("rating", 0), expectCode: http.StatusBadRequest},
-		{name: "Rating境界値NG(6)", mutate: testutil.Field("rating", 6), expectCode: http.StatusBadRequest},
-		{name: "Comment境界値OK(1000文字)", mutate: testutil.Field("comment", strings.Repeat("a", 1000)), expectCode: http.StatusCreated},
-		{name: "Comment境界値NG(1001文字)", mutate: testutil.Field("comment", strings.Repeat("a", 1001)), expectCode: http.StatusBadRequest},
+		{name: "rating boundary OK (1)", mutate: testutil.Field("rating", 1), expectCode: http.StatusCreated},
+		{name: "rating boundary OK (5)", mutate: testutil.Field("rating", 5), expectCode: http.StatusCreated},
+		{name: "rating boundary invalid (0)", mutate: testutil.Field("rating", 0), expectCode: http.StatusBadRequest},
+		{name: "rating boundary invalid (6)", mutate: testutil.Field("rating", 6), expectCode: http.StatusBadRequest},
+		{name: "comment length OK (1000 chars)", mutate: testutil.Field("comment", strings.Repeat("a", 1000)), expectCode: http.StatusCreated},
+		{name: "comment length invalid (1001 chars)", mutate: testutil.Field("comment", strings.Repeat("a", 1001)), expectCode: http.StatusBadRequest},
 	}
 
 	missing := []testCaseReview{
-		{name: "ResourceIDフィールドなし(必須)", mutate: testutil.Field("resourceId", nil), expectCode: http.StatusBadRequest},
-		{name: "ReservationIDフィールドなし(必須)", mutate: testutil.Field("reservationId", nil), expectCode: http.StatusBadRequest},
-		{name: "Ratingフィールドなし(必須)", mutate: testutil.Field("rating", nil), expectCode: http.StatusBadRequest},
-		{name: "Commentフィールドなし(必須)", mutate: testutil.Field("comment", nil), expectCode: http.StatusBadRequest},
+		{name: "missing field: resourceId (required)", mutate: testutil.Field("resourceId", nil), expectCode: http.StatusBadRequest},
+		{name: "missing field: reservationId (required)", mutate: testutil.Field("reservationId", nil), expectCode: http.StatusBadRequest},
+		{name: "missing field: rating (required)", mutate: testutil.Field("rating", nil), expectCode: http.StatusBadRequest},
+		{name: "missing field: comment (required)", mutate: testutil.Field("comment", nil), expectCode: http.StatusBadRequest},
 	}
 
 	empty := []testCaseReview{
-		{name: "Commentが空", mutate: testutil.Field("comment", ""), expectCode: http.StatusBadRequest},
+		{name: "empty comment", mutate: testutil.Field("comment", ""), expectCode: http.StatusBadRequest},
 	}
 
 	allValidationTestCases := [][]testCaseReview{bound, missing, empty}
 
-	// Count total successful cases (normal test + validation success cases + use case error tests)
-	totalSuccessfulCases := 1 // normal test
-	for _, testCaseGroup := range allValidationTestCases {
-		for _, tc := range testCaseGroup {
-			if tc.expectCode == http.StatusCreated {
-				totalSuccessfulCases++
-			}
-		}
-	}
-
-	// Set up mocks for all successful cases at once
-	s.mockCommands.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(expectedResult, nil).Times(totalSuccessfulCases)
-
-	s.Run("正常系: 有効なリクエストで201 Createdが返却される", func() {
+	s.Run("success: returns 201 Created for valid request", func() {
+		s.mockCommands.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(expectedResult, nil).Times(1)
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "bearer-token")
 
 		var body map[string]string
 		httptest.AssertSuccessResponse(s.T(), rec, http.StatusCreated, &body)
 		s.Equal(returnView.ID.String(), body["id"])
-		s.Equal("/reviews/"+returnView.ID.String(), rec.Header().Get("Location"))
+		httptest.AssertHeaders(s.T(), rec, map[string]string{"Location": "/reviews/" + returnView.ID.String()})
 	})
 
-	s.Run("異常系: バリデーションエラーで400 BadRequestが返される", func() {
+	s.Run("error: 400 Bad Request on validation errors", func() {
 		// Mock expectations are already set up at the test level
 
 		for _, testCaseGroup := range allValidationTestCases {
 			for _, tc := range testCaseGroup {
 				s.Run(tc.name, func() {
-					baseMap := func() map[string]any {
-						bytes, _ := json.Marshal(reqBody)
-						var m map[string]any
-						_ = json.Unmarshal(bytes, &m)
-						return m
-					}()
-					requestMap := maps.Clone(baseMap)
-					tc.mutate(requestMap)
+					requestMap := testutil.DtoMap(s.T(), reqBody, tc.mutate)
 
+					if tc.expectCode == http.StatusCreated {
+						s.mockCommands.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).
+							Return(expectedResult, nil).Times(1)
+					}
 					rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, requestMap, "bearer-token")
 					if tc.expectCode == http.StatusCreated {
 						httptest.AssertSuccessResponse(s.T(), rec, tc.expectCode, nil)
@@ -166,12 +148,12 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 		}
 	})
 
-	s.Run("異常系: 認証なしで500 Internal Server Errorが返される", func() {
+	s.Run("error: 401 Unauthorized when unauthenticated", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, url, reqBody, "")
-		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal error")
+		httptest.AssertErrorResponse(s.T(), rec, http.StatusUnauthorized, "Unauthorized")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			commandsError  error
@@ -179,19 +161,19 @@ func (s *ReviewHandlerTestSuite) TestCreate() {
 			expectedMsg    string
 		}{
 			{
-				name:           "ドメインバリデーションエラー",
+				name:           "domain validation error",
 				commandsError:  commands.ErrDomainValidationFailed,
 				expectedStatus: http.StatusBadRequest,
 				expectedMsg:    "Invalid request",
 			},
 			{
-				name:           "レビュー作成失敗",
+				name:           "review creation failed",
 				commandsError:  commands.ErrReviewCreationFailed,
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
@@ -223,7 +205,7 @@ func (s *ReviewHandlerTestSuite) TestGet() {
 	returnView := builder.NewReviewBuilder().BuildViewQuery()
 	returnView.ID = reviewID
 
-	s.Run("正常系: 200 OKでReviewResponseが返却される", func() {
+	s.Run("success: returns 200 OK with ReviewResponse", func() {
 		s.mockQueries.EXPECT().GetByID(gomock.Any(), reviewID).
 			Return(returnView, nil).Times(1)
 
@@ -236,13 +218,13 @@ func (s *ReviewHandlerTestSuite) TestGet() {
 		s.Equal(returnView.Comment, response.Comment)
 	})
 
-	s.Run("異常系: 無効なUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid UUID", func() {
 		invalidURL := "/reviews/invalid-uuid"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, invalidURL, nil, "")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid id")
 	})
 
-	s.Run("異常系: 存在しないレビューで404 Not Foundが返される", func() {
+	s.Run("error: 404 Not Found for missing review", func() {
 		s.mockQueries.EXPECT().GetByID(gomock.Any(), reviewID).
 			Return(nil, queries.ErrReviewNotFound).Times(1)
 
@@ -250,7 +232,7 @@ func (s *ReviewHandlerTestSuite) TestGet() {
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusNotFound, "Not found")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			queriesError   error
@@ -258,19 +240,19 @@ func (s *ReviewHandlerTestSuite) TestGet() {
 			expectedMsg    string
 		}{
 			{
-				name:           "レビューが見つからない",
+				name:           "review not found",
 				queriesError:   queries.ErrReviewNotFound,
 				expectedStatus: http.StatusNotFound,
 				expectedMsg:    "Not found",
 			},
 			{
-				name:           "クエリ失敗エラー",
+				name:           "query failed",
 				queriesError:   queries.ErrReviewQueryFailed,
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				queriesError:   errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
@@ -302,41 +284,30 @@ func (s *ReviewHandlerTestSuite) TestUpdate() {
 	returnView.ID = reviewID
 
 	testCases := []testCaseReview{
-		{name: "Rating境界値OK(1)", mutate: testutil.Field("rating", 1), expectCode: http.StatusNoContent},
-		{name: "Rating境界値OK(5)", mutate: testutil.Field("rating", 5), expectCode: http.StatusNoContent},
-		{name: "Rating境界値NG(0)", mutate: testutil.Field("rating", 0), expectCode: http.StatusBadRequest},
-		{name: "Rating境界値NG(6)", mutate: testutil.Field("rating", 6), expectCode: http.StatusBadRequest},
-		{name: "Comment境界値OK(1000文字)", mutate: testutil.Field("comment", strings.Repeat("a", 1000)), expectCode: http.StatusNoContent},
-		{name: "Comment境界値NG(1001文字)", mutate: testutil.Field("comment", strings.Repeat("a", 1001)), expectCode: http.StatusBadRequest},
+		{name: "rating boundary OK (1)", mutate: testutil.Field("rating", 1), expectCode: http.StatusNoContent},
+		{name: "rating boundary OK (5)", mutate: testutil.Field("rating", 5), expectCode: http.StatusNoContent},
+		{name: "rating boundary invalid (0)", mutate: testutil.Field("rating", 0), expectCode: http.StatusBadRequest},
+		{name: "rating boundary invalid (6)", mutate: testutil.Field("rating", 6), expectCode: http.StatusBadRequest},
+		{name: "comment length OK (1000 chars)", mutate: testutil.Field("comment", strings.Repeat("a", 1000)), expectCode: http.StatusNoContent},
+		{name: "comment length invalid (1001 chars)", mutate: testutil.Field("comment", strings.Repeat("a", 1001)), expectCode: http.StatusBadRequest},
 	}
 
-	totalSuccessfulCases := 1
-	for _, tc := range testCases {
-		if tc.expectCode == http.StatusNoContent {
-			totalSuccessfulCases++
-		}
-	}
-
-	s.mockCommands.EXPECT().Update(gomock.Any(), reviewID, gomock.Any(), gomock.Any()).
-		Return(nil).Times(totalSuccessfulCases)
-
-	s.Run("正常系: 204 No Contentが返却される", func() {
+	s.Run("success: returns 204 No Content", func() {
+		s.mockCommands.EXPECT().Update(gomock.Any(), reviewID, gomock.Any(), gomock.Any()).
+			Return(nil).Times(1)
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPut, url, reqBody, "bearer-token")
 		httptest.AssertSuccessResponse(s.T(), rec, http.StatusNoContent, nil)
 	})
 
-	s.Run("異常系: バリデーションエラーで400 BadRequestが返される", func() {
+	s.Run("error: 400 Bad Request on validation errors", func() {
 		for _, tc := range testCases {
 			s.Run(tc.name, func() {
-				baseMap := func() map[string]any {
-					bytes, _ := json.Marshal(reqBody)
-					var m map[string]any
-					_ = json.Unmarshal(bytes, &m)
-					return m
-				}()
-				requestMap := maps.Clone(baseMap)
-				tc.mutate(requestMap)
+				requestMap := testutil.DtoMap(s.T(), reqBody, tc.mutate)
 
+				if tc.expectCode == http.StatusNoContent {
+					s.mockCommands.EXPECT().Update(gomock.Any(), reviewID, gomock.Any(), gomock.Any()).
+						Return(nil).Times(1)
+				}
 				rec := httptest.PerformRequest(s.T(), s.router, http.MethodPut, url, requestMap, "bearer-token")
 				if tc.expectCode == http.StatusNoContent {
 					httptest.AssertSuccessResponse(s.T(), rec, tc.expectCode, nil)
@@ -347,18 +318,18 @@ func (s *ReviewHandlerTestSuite) TestUpdate() {
 		}
 	})
 
-	s.Run("異常系: 無効なUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid UUID", func() {
 		invalidURL := "/reviews/invalid-uuid"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPut, invalidURL, reqBody, "bearer-token")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid id")
 	})
 
-	s.Run("異常系: 認証なしで500 Internal Server Errorが返される", func() {
+	s.Run("error: 401 Unauthorized when unauthenticated", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPut, url, reqBody, "")
-		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal error")
+		httptest.AssertErrorResponse(s.T(), rec, http.StatusUnauthorized, "Unauthorized")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			commandsError  error
@@ -366,25 +337,25 @@ func (s *ReviewHandlerTestSuite) TestUpdate() {
 			expectedMsg    string
 		}{
 			{
-				name:           "レビューが所有者でない",
+				name:           "review not owned",
 				commandsError:  commands.ErrReviewNotOwned,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Forbidden",
 			},
 			{
-				name:           "レビューが見つからない",
+				name:           "review not found",
 				commandsError:  commands.ErrReviewNotFoundWrite,
 				expectedStatus: http.StatusNotFound,
 				expectedMsg:    "Not found",
 			},
 			{
-				name:           "レビュー更新失敗",
+				name:           "review update failed",
 				commandsError:  commands.ErrReviewUpdateFailed,
 				expectedStatus: http.StatusBadRequest,
 				expectedMsg:    "Update failed",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusBadRequest,
 				expectedMsg:    "Update failed",
@@ -412,7 +383,7 @@ func (s *ReviewHandlerTestSuite) TestDelete() {
 	reviewID := uuid.New()
 	url := "/reviews/" + reviewID.String()
 
-	s.Run("正常系: 204 No Contentが返却される", func() {
+	s.Run("success: returns 204 No Content", func() {
 		s.mockCommands.EXPECT().Delete(gomock.Any(), reviewID, gomock.Any(), string(user.RoleViewer)).
 			Return(nil).Times(1)
 
@@ -420,18 +391,18 @@ func (s *ReviewHandlerTestSuite) TestDelete() {
 		s.Equal(http.StatusNoContent, rec.Code)
 	})
 
-	s.Run("異常系: 無効なUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid UUID", func() {
 		invalidURL := "/reviews/invalid-uuid"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodDelete, invalidURL, nil, "bearer-token")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid id")
 	})
 
-	s.Run("異常系: 認証なしで500 Internal Server Errorが返される", func() {
+	s.Run("error: 401 Unauthorized when unauthenticated", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodDelete, url, nil, "")
-		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal error")
+		httptest.AssertErrorResponse(s.T(), rec, http.StatusUnauthorized, "Unauthorized")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			commandsError  error
@@ -439,25 +410,25 @@ func (s *ReviewHandlerTestSuite) TestDelete() {
 			expectedMsg    string
 		}{
 			{
-				name:           "レビューが所有者でない",
+				name:           "review not owned",
 				commandsError:  commands.ErrReviewNotOwned,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Forbidden",
 			},
 			{
-				name:           "レビューが見つからない",
+				name:           "review not found",
 				commandsError:  commands.ErrReviewNotFoundWrite,
 				expectedStatus: http.StatusNotFound,
 				expectedMsg:    "Not found",
 			},
 			{
-				name:           "レビュー削除失敗",
+				name:           "review delete failed",
 				commandsError:  commands.ErrReviewDeletionFailed,
 				expectedStatus: http.StatusBadRequest,
 				expectedMsg:    "Delete failed",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusBadRequest,
 				expectedMsg:    "Delete failed",
@@ -475,7 +446,7 @@ func (s *ReviewHandlerTestSuite) TestDelete() {
 		}
 	})
 
-	s.Run("異常系: 管理者権限での削除テスト", func() {
+	s.Run("success: delete as admin", func() {
 		// Setup admin auth middleware
 		adminRouter := gin.New()
 		adminAuthMiddleware := func(c *gin.Context) {
@@ -511,7 +482,7 @@ func (s *ReviewHandlerTestSuite) TestListByResource() {
 		builder.NewReviewBuilder().WithRating(3).BuildListItem(),
 	}
 
-	s.Run("正常系: リソースのレビューリストが返却される", func() {
+	s.Run("success: returns review list by resource", func() {
 		expectedFilters := queries.ReviewFilters{}
 		s.mockQueries.EXPECT().ListByResource(gomock.Any(), resourceID, expectedFilters, (*queries.Cursor)(nil), 20).
 			Return(items, nil, nil).Times(1)
@@ -525,7 +496,7 @@ func (s *ReviewHandlerTestSuite) TestListByResource() {
 		s.Equal(len(items), len(reviews))
 	})
 
-	s.Run("正常系: ページネーションとフィルタが動作する", func() {
+	s.Run("success: pagination and filters work", func() {
 		url := baseURL + "?min_rating=4&max_rating=5&limit=10&after=cursor123"
 		minRating := 4
 		maxRating := 5
@@ -546,13 +517,13 @@ func (s *ReviewHandlerTestSuite) TestListByResource() {
 		s.Equal("next_cursor456", response["next_cursor"])
 	})
 
-	s.Run("異常系: 無効なリソースUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid resource UUID", func() {
 		invalidURL := "/resources/invalid-uuid/reviews"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, invalidURL, nil, "")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid resource id")
 	})
 
-	s.Run("異常系: クエリエラーで500 Internal Server Errorが返される", func() {
+	s.Run("error: returns 500 Internal Server Error on query error", func() {
 		expectedFilters := queries.ReviewFilters{}
 		s.mockQueries.EXPECT().ListByResource(gomock.Any(), resourceID, expectedFilters, (*queries.Cursor)(nil), 20).
 			Return(nil, nil, errors.New("database error")).Times(1)
@@ -561,7 +532,7 @@ func (s *ReviewHandlerTestSuite) TestListByResource() {
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal error")
 	})
 
-	s.Run("正常系: フィルタパラメータの境界値テスト", func() {
+	s.Run("success: filter parameter boundary tests", func() {
 		testCases := []struct {
 			name      string
 			params    string
@@ -587,7 +558,7 @@ func (s *ReviewHandlerTestSuite) TestListByResource() {
 				maxRating: func() *int { v := 5; return &v }(),
 			},
 			{
-				name:      "無効なmin_rating(文字列)は無視される",
+				name:      "ignores invalid min_rating (string)",
 				params:    "?min_rating=invalid",
 				minRating: nil,
 				maxRating: nil,
@@ -622,7 +593,7 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 		builder.NewReviewBuilder().WithUserID(userID).BuildListItem(),
 	}
 
-	s.Run("正常系: ユーザーのレビューリストが返却される", func() {
+	s.Run("success: returns review list by user", func() {
 		s.mockQueries.EXPECT().ListByUser(gomock.Any(), userID, gomock.Any(), string(user.RoleViewer), (*queries.Cursor)(nil), 20).
 			Return(items, nil, nil).Times(1)
 
@@ -635,7 +606,7 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 		s.Equal(len(items), len(reviews))
 	})
 
-	s.Run("正常系: ページネーションが動作する", func() {
+	s.Run("success: pagination works", func() {
 		url := baseURL + "?limit=10&after=cursor123"
 		expectedCursor := &queries.Cursor{After: "cursor123"}
 		nextCursor := &queries.Cursor{After: "next_cursor456"}
@@ -653,28 +624,18 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 		s.Equal("next_cursor456", response["next_cursor"])
 	})
 
-	s.Run("異常系: 無効なユーザーUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid user UUID", func() {
 		invalidURL := "/users/invalid-uuid/reviews"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, invalidURL, nil, "bearer-token")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid user id")
 	})
 
-	s.Run("異常系: 認証なし（匿名ユーザー）でアクセスした場合", func() {
-		// Setup router without authentication for this test
-		noAuthRouter := gin.New()
-		noAuthRouter.GET("/users/:id/reviews", func(c *gin.Context) {
-			// No authentication middleware
-			s.handler.ListByUser(c)
-		})
-
-		s.mockQueries.EXPECT().ListByUser(gomock.Any(), userID, uuid.Nil, "", (*queries.Cursor)(nil), 20).
-			Return(items, nil, nil).Times(1)
-
-		rec := httptest.PerformRequest(s.T(), noAuthRouter, http.MethodGet, baseURL, nil, "")
-		httptest.AssertSuccessResponse(s.T(), rec, http.StatusOK, nil)
+	s.Run("error: 401 Unauthorized when unauthenticated (anonymous)", func() {
+		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, baseURL, nil, "")
+		httptest.AssertErrorResponse(s.T(), rec, http.StatusUnauthorized, "Unauthorized")
 	})
 
-	s.Run("異常系: アクセス権限エラーで403 Forbiddenが返される", func() {
+	s.Run("error: 403 Forbidden on access denied", func() {
 		s.mockQueries.EXPECT().ListByUser(gomock.Any(), userID, gomock.Any(), string(user.RoleViewer), (*queries.Cursor)(nil), 20).
 			Return(nil, nil, queries.ErrReviewAccess).Times(1)
 
@@ -682,7 +643,7 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusForbidden, "Access denied")
 	})
 
-	s.Run("正常系: 管理者権限でのアクセステスト", func() {
+	s.Run("success: access with admin role", func() {
 		// Setup admin auth middleware
 		adminRouter := gin.New()
 		adminAuthMiddleware := func(c *gin.Context) {
@@ -703,7 +664,7 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 		httptest.AssertSuccessResponse(s.T(), rec, http.StatusOK, nil)
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			queriesError   error
@@ -711,19 +672,19 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 			expectedMsg    string
 		}{
 			{
-				name:           "アクセス権限なし",
+				name:           "access denied",
 				queriesError:   queries.ErrReviewAccess,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Access denied",
 			},
 			{
-				name:           "クエリ失敗",
+				name:           "query failed",
 				queriesError:   queries.ErrReviewQueryFailed,
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				queriesError:   errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal error",
@@ -752,7 +713,7 @@ func (s *ReviewHandlerTestSuite) TestResourceRatingStats() {
 
 	expectedStats := builder.NewReviewBuilder().WithResourceID(resourceID).BuildResourceRatingStats()
 
-	s.Run("正常系: 200 OKでResourceRatingStatsResponseが返却される", func() {
+	s.Run("success: returns 200 OK with ResourceRatingStatsResponse", func() {
 		s.mockQueries.EXPECT().GetResourceRatingStats(gomock.Any(), resourceID).
 			Return(expectedStats, nil).Times(1)
 
@@ -767,37 +728,37 @@ func (s *ReviewHandlerTestSuite) TestResourceRatingStats() {
 		s.Equal(expectedStats.Rating5Count, response.Rating5Count)
 	})
 
-	s.Run("異常系: 無効なリソースUUIDで400 Bad Requestが返される", func() {
+	s.Run("error: 400 Bad Request for invalid resource UUID", func() {
 		invalidURL := "/resources/invalid-uuid/rating-stats"
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, invalidURL, nil, "")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusBadRequest, "Invalid resource id")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			queriesError   error
 			expectedStatus int
 			expectedMsg    string
 		}{
-			{
-				name:           "統計が見つからない",
-				queriesError:   queries.ErrReviewNotFound,
-				expectedStatus: http.StatusInternalServerError,
-				expectedMsg:    "Failed to get stats",
-			},
-			{
-				name:           "クエリ失敗",
-				queriesError:   queries.ErrReviewQueryFailed,
-				expectedStatus: http.StatusInternalServerError,
-				expectedMsg:    "Failed to get stats",
-			},
-			{
-				name:           "内部サーバーエラー",
-				queriesError:   errors.New("database error"),
-				expectedStatus: http.StatusInternalServerError,
-				expectedMsg:    "Failed to get stats",
-			},
+            {
+                name:           "stats not found",
+                queriesError:   queries.ErrReviewNotFound,
+                expectedStatus: http.StatusInternalServerError,
+                expectedMsg:    "Failed to get stats",
+            },
+            {
+                name:           "query failed",
+                queriesError:   queries.ErrReviewQueryFailed,
+                expectedStatus: http.StatusInternalServerError,
+                expectedMsg:    "Failed to get stats",
+            },
+            {
+                name:           "internal server error",
+                queriesError:   errors.New("database error"),
+                expectedStatus: http.StatusInternalServerError,
+                expectedMsg:    "Failed to get stats",
+            },
 		}
 
 		for _, tc := range testCases {

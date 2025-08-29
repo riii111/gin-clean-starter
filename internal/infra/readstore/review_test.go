@@ -446,6 +446,19 @@ func testKeysetPaginationCases(t *testing.T, ctx context.Context) {
 			expectedCount: 10,
 		},
 		{
+			name:  "tie-break on equal created_at by id",
+			limit: 20,
+			setupMock: func(mock *readstoremock.MockReviewReadQueries) {
+				ts := pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true}
+				rows := []sqlc.GetReviewsByResourceKeysetRow{
+					{ID: uuid.New(), UserEmail: "u1@example.com", Rating: 5, Comment: "A", CreatedAt: ts},
+					{ID: uuid.New(), UserEmail: "u2@example.com", Rating: 4, Comment: "B", CreatedAt: ts},
+				}
+				mock.EXPECT().GetReviewsByResourceKeyset(ctx, gomock.Any(), gomock.Any()).Return(rows, nil)
+			},
+			expectedCount: 2,
+		},
+		{
 			name:  "empty results",
 			limit: 20,
 			setupMock: func(mock *readstoremock.MockReviewReadQueries) {
@@ -983,5 +996,5 @@ func (m *mockDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows
 }
 
 func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return nil
+	panic("mockDBTX.QueryRow was called unexpectedly. Use sqlc mock instead.")
 }

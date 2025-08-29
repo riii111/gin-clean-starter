@@ -3,9 +3,7 @@
 package api_test
 
 import (
-	"encoding/json"
 	"errors"
-	"maps"
 	"net/http"
 	"strings"
 	"testing"
@@ -81,7 +79,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 	expectedToken := "test-jwt-token"
 	expectedRefresh := "test-refresh-token"
 
-	s.Run("正常系: 有効なリクエストで200 OKが返却される", func() {
+	s.Run("success: returns 200 OK for valid credentials", func() {
 		s.mockCommands.EXPECT().Login(gomock.Any(), reqBody).
 			Return(&commands.LoginResult{
 				UserID:     returnUser.ID,
@@ -97,22 +95,22 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 		s.Equal(returnUser.Email, response.User.Email)
 	})
 
-	s.Run("異常系: バリデーションエラーで400 BadRequestが返される", func() {
+	s.Run("error: 400 Bad Request on validation errors", func() {
 		bound := []testCaseAuth{
-			{name: "Email境界値OK(有効なメール)", mutate: testutil.Field("email", "valid@example.com"), expectCode: http.StatusOK},
-			{name: "Email境界値NG(無効なメール)", mutate: testutil.Field("email", "invalid-email"), expectCode: http.StatusBadRequest},
-			{name: "Password境界値OK(8文字)", mutate: testutil.Field("password", "password"), expectCode: http.StatusOK},
-			{name: "Password境界値NG(7文字)", mutate: testutil.Field("password", strings.Repeat("a", 7)), expectCode: http.StatusBadRequest},
+			{name: "email boundary OK (valid email)", mutate: testutil.Field("email", "valid@example.com"), expectCode: http.StatusOK},
+			{name: "email boundary invalid (invalid email)", mutate: testutil.Field("email", "invalid-email"), expectCode: http.StatusBadRequest},
+			{name: "password boundary OK (8 chars)", mutate: testutil.Field("password", "password"), expectCode: http.StatusOK},
+			{name: "password boundary invalid (7 chars)", mutate: testutil.Field("password", strings.Repeat("a", 7)), expectCode: http.StatusBadRequest},
 		}
 
 		missing := []testCaseAuth{
-			{name: "Emailフィールドなし(必須)", mutate: testutil.Field("email", nil), expectCode: http.StatusBadRequest},
-			{name: "Passwordフィールドなし(必須)", mutate: testutil.Field("password", nil), expectCode: http.StatusBadRequest},
+			{name: "missing field: email (required)", mutate: testutil.Field("email", nil), expectCode: http.StatusBadRequest},
+			{name: "missing field: password (required)", mutate: testutil.Field("password", nil), expectCode: http.StatusBadRequest},
 		}
 
 		empty := []testCaseAuth{
-			{name: "Emailが空", mutate: testutil.Field("email", ""), expectCode: http.StatusBadRequest},
-			{name: "Passwordが空", mutate: testutil.Field("password", ""), expectCode: http.StatusBadRequest},
+			{name: "empty email", mutate: testutil.Field("email", ""), expectCode: http.StatusBadRequest},
+			{name: "empty password", mutate: testutil.Field("password", ""), expectCode: http.StatusBadRequest},
 		}
 
 		allValidationTestCases := [][]testCaseAuth{bound, missing, empty}
@@ -120,14 +118,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 		for _, testCaseGroup := range allValidationTestCases {
 			for _, tc := range testCaseGroup {
 				s.Run(tc.name, func() {
-					baseMap := func() map[string]any {
-						bytes, _ := json.Marshal(reqBody)
-						var m map[string]any
-						_ = json.Unmarshal(bytes, &m)
-						return m
-					}()
-					requestMap := maps.Clone(baseMap)
-					tc.mutate(requestMap)
+					requestMap := testutil.DtoMap(s.T(), reqBody, tc.mutate)
 
 					if tc.expectCode == http.StatusOK {
 						email, _ := requestMap["email"].(string)
@@ -153,7 +144,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 		}
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			commandsError  error
@@ -161,25 +152,25 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 			expectedMsg    string
 		}{
 			{
-				name:           "認証失敗",
+				name:           "invalid credentials",
 				commandsError:  commands.ErrInvalidCredentials,
 				expectedStatus: http.StatusUnauthorized,
 				expectedMsg:    "Invalid email or password",
 			},
 			{
-				name:           "ユーザー見つからない",
+				name:           "user not found",
 				commandsError:  commands.ErrUserNotFound,
 				expectedStatus: http.StatusUnauthorized,
 				expectedMsg:    "Invalid email or password",
 			},
 			{
-				name:           "ユーザー無効",
+				name:           "user inactive",
 				commandsError:  commands.ErrUserInactive,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Account is inactive",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal server error",
@@ -199,7 +190,7 @@ func (s *AuthHandlerTestSuite) TestLogin() {
 }
 
 func (s *AuthHandlerTestSuite) TestLogout() {
-	s.Run("正常系: 204 No Contentが返却される", func() {
+	s.Run("success: returns 204 No Content", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodPost, "/auth/logout", nil, "bearer-token")
 		s.Equal(http.StatusNoContent, rec.Code)
 	})
@@ -209,7 +200,7 @@ func (s *AuthHandlerTestSuite) TestMe() {
 	url := "/auth/me"
 	returnUser := builder.NewUserBuilder().BuildReadModel()
 
-	s.Run("正常系: 認証済みユーザー情報が返却される", func() {
+	s.Run("success: returns current user info", func() {
 		s.mockQueries.EXPECT().GetCurrentUser(gomock.Any(), gomock.Any()).
 			Return(returnUser, nil).Times(1)
 
@@ -220,12 +211,12 @@ func (s *AuthHandlerTestSuite) TestMe() {
 		s.Equal(returnUser.Email, response["email"])
 	})
 
-	s.Run("異常系: 認証なしで500が返却される", func() {
+	s.Run("error: returns 500 when user_id missing in context", func() {
 		rec := httptest.PerformRequest(s.T(), s.router, http.MethodGet, url, nil, "")
 		httptest.AssertErrorResponse(s.T(), rec, http.StatusInternalServerError, "Internal server error")
 	})
 
-	s.Run("異常系: ユースケース起因のエラーの場合、適切なステータスコードが返却される", func() {
+	s.Run("error: maps usecase errors to proper statuses", func() {
 		testCases := []struct {
 			name           string
 			commandsError  error
@@ -233,19 +224,19 @@ func (s *AuthHandlerTestSuite) TestMe() {
 			expectedMsg    string
 		}{
 			{
-				name:           "ユーザー見つからない",
+				name:           "user not found",
 				commandsError:  queries.ErrUserNotFound,
 				expectedStatus: http.StatusNotFound,
 				expectedMsg:    "User not found",
 			},
 			{
-				name:           "ユーザー無効",
+				name:           "user inactive",
 				commandsError:  queries.ErrUserInactive,
 				expectedStatus: http.StatusForbidden,
 				expectedMsg:    "Account is inactive",
 			},
 			{
-				name:           "内部サーバーエラー",
+				name:           "internal server error",
 				commandsError:  errors.New("database error"),
 				expectedStatus: http.StatusInternalServerError,
 				expectedMsg:    "Internal server error",

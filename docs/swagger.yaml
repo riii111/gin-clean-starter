@@ -471,7 +471,7 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Cursor for keyset pagination
+      - description: Cursor for keyset pagination (Base64URL v1: "v1:<micros>-<uuid>")
         in: query
         name: after
         type: string
@@ -679,7 +679,7 @@ paths:
         in: query
         name: limit
         type: integer
-      - description: Cursor for keyset pagination
+      - description: Cursor for keyset pagination (Base64URL v1: "v1:<micros>-<uuid>")
         in: query
         name: after
         type: string
@@ -706,6 +706,12 @@ paths:
             type: object
         "403":
           description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties:
               type: string

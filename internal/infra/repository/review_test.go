@@ -53,10 +53,11 @@ func TestRepository_Create(t *testing.T) {
 		{
 			name: "error: duplicate review error",
 			setupMock: func(mock *repositorymock.MockReviewWriteQueries, rev *review.Review, tx sqlc.DBTX) {
-				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(uuid.Nil, errors.New("duplicate key value violates unique constraint"))
+				dup := &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"}
+				mock.EXPECT().CreateReview(ctx, tx, gomock.Any()).Return(uuid.Nil, dup)
 			},
 			expectedError: true,
-			expectKind:    infra.KindDBFailure,
+			expectKind:    infra.KindDuplicateKey,
 		},
 	}
 
@@ -236,5 +237,5 @@ func (m *mockDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows
 }
 
 func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	return nil
+	panic("mockDBTX.QueryRow was called unexpectedly. Use sqlc mock instead.")
 }
