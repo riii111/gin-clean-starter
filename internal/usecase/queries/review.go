@@ -75,8 +75,8 @@ type reviewQueriesImpl struct {
 	repo ReviewReadStore
 }
 
-func NewReviewQueries(repo ReviewReadStore) ReviewQueries {
-	return &reviewQueriesImpl{repo: repo}
+func NewReviewQueries(rs ReviewReadStore) ReviewQueries {
+	return &reviewQueriesImpl{repo: rs}
 }
 
 func (q *reviewQueriesImpl) GetByID(ctx context.Context, id uuid.UUID) (*ReviewView, error) {
