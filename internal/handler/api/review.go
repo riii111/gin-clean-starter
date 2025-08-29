@@ -248,12 +248,14 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 			maxPtr = &iv
 		}
 	}
+	// Set defaults; queries normalize to avoid duplicate checks.
 	limit := 20
 	if v := c.Query("limit"); v != "" {
 		if iv, e := strconv.Atoi(v); e == nil {
-			limit = queries.ValidateLimit(iv)
+			limit = iv
 		}
 	}
+	// Pass raw cursor; queries decode (single source of truth).
 	var cursor *queries.Cursor
 	if after := c.Query("after"); after != "" {
 		cursor = &queries.Cursor{After: after}
@@ -295,12 +297,14 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 	}
 	actorID, _ := middleware.GetUserID(c)
 	role, _ := middleware.GetUserRole(c)
+	// Set defaults; queries normalize to avoid duplicate checks.
 	limit := 20
 	if v := c.Query("limit"); v != "" {
 		if iv, e := strconv.Atoi(v); e == nil {
-			limit = queries.ValidateLimit(iv)
+			limit = iv
 		}
 	}
+	// Pass raw cursor; queries decode (single source of truth).
 	var cursor *queries.Cursor
 	if after := c.Query("after"); after != "" {
 		cursor = &queries.Cursor{After: after}

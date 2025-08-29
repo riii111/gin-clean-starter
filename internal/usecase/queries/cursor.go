@@ -85,6 +85,7 @@ type Cursor struct {
 	After string `json:"after,omitempty"`
 }
 
+// Normalize page size (default/max) for consistent reads.
 func ValidateLimit(limit int) int {
 	if limit <= 0 {
 		return 20 // default limit
@@ -95,8 +96,7 @@ func ValidateLimit(limit int) int {
 	return limit
 }
 
-// ToPgFetchLimit returns the SQL fetch size as int32 (limit+1) for keyset pagination.
-// ValidateLimit is applied internally to clamp values to a safe range.
+// Use limit+1 fetch to detect next page consistently.
 func ToPgFetchLimit(limit int) int32 {
 	l := ValidateLimit(limit)
 	return pgconv.IntToInt32(l + 1)

@@ -270,10 +270,13 @@ func (s *ReviewSuite) TestUpdateReview() {
 
 		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodPut, url, updateReq, token)
-		require.Equal(t, http.StatusOK, w.Code, "Should update review successfully")
+		require.Equal(t, http.StatusNoContent, w.Code, "Should update review successfully")
 
+		// Fetch updated review to verify changes
+		getResp := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, token)
+		require.Equal(t, http.StatusOK, getResp.Code)
 		var updatedReview response.ReviewResponse
-		err = httptest.DecodeResponseBody(t, w.Body, &updatedReview)
+		err = httptest.DecodeResponseBody(t, getResp.Body, &updatedReview)
 		require.NoError(t, err)
 		require.Equal(t, id, updatedReview.ID)
 		require.Equal(t, int32(5), updatedReview.Rating)
@@ -317,10 +320,13 @@ func (s *ReviewSuite) TestUpdateReview() {
 
 		url := reviewsURL + "/" + id
 		w := httptest.PerformRequest(t, s.Router, http.MethodPut, url, updateReq, token)
-		require.Equal(t, http.StatusOK, w.Code, "Should update rating only")
+		require.Equal(t, http.StatusNoContent, w.Code, "Should update rating only")
 
+		// Fetch updated review to verify changes
+		getResp := httptest.PerformRequest(t, s.Router, http.MethodGet, url, nil, token)
+		require.Equal(t, http.StatusOK, getResp.Code)
 		var updatedReview response.ReviewResponse
-		err = httptest.DecodeResponseBody(t, w.Body, &updatedReview)
+		err = httptest.DecodeResponseBody(t, getResp.Body, &updatedReview)
 		require.NoError(t, err)
 		require.Equal(t, id, updatedReview.ID)
 		require.Equal(t, int32(4), updatedReview.Rating)
