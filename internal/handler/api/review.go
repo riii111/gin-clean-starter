@@ -62,7 +62,9 @@ func (h *ReviewHandler) Create(c *gin.Context) {
 		return
 	}
 
-	result, err := h.cmds.Create(c.Request.Context(), req, userID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	result, err := h.cmds.Create(ctx, req, userID)
 	if err != nil {
 		switch {
 		case infra.IsKind(err, infra.KindDuplicateKey):
@@ -100,7 +102,9 @@ func (h *ReviewHandler) Get(c *gin.Context) {
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid id", nil)
 		return
 	}
-	view, err := h.q.GetByID(c.Request.Context(), id)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	view, err := h.q.GetByID(ctx, id)
 	if err != nil {
 		switch {
 		case errors.Is(err, queries.ErrReviewNotFound):
@@ -152,7 +156,9 @@ func (h *ReviewHandler) Update(c *gin.Context) {
 		httperr.AbortWithError(c, http.StatusBadRequest, bindErr, "Invalid request", nil)
 		return
 	}
-	if err = h.cmds.Update(c.Request.Context(), id, req, userID); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	if err = h.cmds.Update(ctx, id, req, userID); err != nil {
 		slog.Info("Update review command failed", "review_id", id, "user_id", userID, "error", err.Error())
 		switch {
 		case errors.Is(err, commands.ErrReviewNotOwned):
@@ -199,7 +205,9 @@ func (h *ReviewHandler) Delete(c *gin.Context) {
 		return
 	}
 	role, _ := middleware.GetUserRole(c)
-	if err := h.cmds.Delete(c.Request.Context(), id, userID, string(role)); err != nil {
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	if err := h.cmds.Delete(ctx, id, userID, string(role)); err != nil {
 		slog.Info("Delete review command failed", "review_id", id, "user_id", userID, "role", string(role), "error", err.Error())
 		switch {
 		case errors.Is(err, commands.ErrReviewNotOwned):
@@ -248,24 +256,27 @@ func (h *ReviewHandler) ListByResource(c *gin.Context) {
 			maxPtr = &iv
 		}
 	}
-	// Set defaults; queries normalize to avoid duplicate checks.
-	limit := 20
-	if v := c.Query("limit"); v != "" {
-		if iv, e := strconv.Atoi(v); e == nil {
-			limit = iv
-		}
+	// Validate rating range consistency if both provided
+	if minPtr != nil && maxPtr != nil && *minPtr > *maxPtr {
+		slog.Info("Invalid rating range: min greater than max", "min", *minPtr, "max", *maxPtr)
+		httperr.AbortWithError(c, http.StatusBadRequest, errors.New("invalid rating range"), "Invalid rating range", nil)
+		return
 	}
-	// Pass raw cursor; queries decode (single source of truth).
-	var cursor *queries.Cursor
-	if after := c.Query("after"); after != "" {
-		cursor = &queries.Cursor{After: after}
-	}
+
+	// Common list params
+	limit, cursor := parseListParams(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 	items, next, err := h.q.ListByResource(ctx, resourceID, queries.ReviewFilters{MinRating: minPtr, MaxRating: maxPtr}, cursor, limit)
 	if err != nil {
-		slog.Info("list reviews by resource failed", "error", err.Error())
-		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+		switch {
+		case errors.Is(err, queries.ErrInvalidCursorQuery):
+			slog.Info("invalid cursor in list reviews by resource", "error", err.Error())
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid cursor", nil)
+		default:
+			slog.Error("list reviews by resource failed", "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+		}
 		return
 	}
 	resp := gin.H{"reviews": resdto.FromReviewList(items)}
@@ -297,24 +308,23 @@ func (h *ReviewHandler) ListByUser(c *gin.Context) {
 	}
 	actorID, _ := middleware.GetUserID(c)
 	role, _ := middleware.GetUserRole(c)
-	// Set defaults; queries normalize to avoid duplicate checks.
-	limit := 20
-	if v := c.Query("limit"); v != "" {
-		if iv, e := strconv.Atoi(v); e == nil {
-			limit = iv
-		}
-	}
-	// Pass raw cursor; queries decode (single source of truth).
-	var cursor *queries.Cursor
-	if after := c.Query("after"); after != "" {
-		cursor = &queries.Cursor{After: after}
-	}
+	// Common list params
+	limit, cursor := parseListParams(c)
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
 	defer cancel()
 	items, next, err := h.q.ListByUser(ctx, userID, actorID, string(role), cursor, limit)
 	if err != nil {
-		slog.Info("Access denied in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
-		httperr.AbortWithError(c, http.StatusForbidden, err, "Access denied", nil)
+		switch {
+		case errors.Is(err, queries.ErrReviewAccess):
+			slog.Info("Access denied in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusForbidden, err, "Access denied", nil)
+		case errors.Is(err, queries.ErrInvalidCursorQuery):
+			slog.Info("Invalid cursor in list user reviews", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid cursor", nil)
+		default:
+			slog.Error("List user reviews failed", "user_id", userID, "actor_id", actorID, "role", string(role), "error", err.Error())
+			httperr.AbortWithError(c, http.StatusInternalServerError, err, "Internal error", nil)
+		}
 		return
 	}
 	resp := gin.H{"reviews": resdto.FromReviewList(items)}
@@ -340,11 +350,30 @@ func (h *ReviewHandler) ResourceRatingStats(c *gin.Context) {
 		httperr.AbortWithError(c, http.StatusBadRequest, err, "Invalid resource id", nil)
 		return
 	}
-	stats, err := h.q.GetResourceRatingStats(c.Request.Context(), resourceID)
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+	defer cancel()
+	stats, err := h.q.GetResourceRatingStats(ctx, resourceID)
 	if err != nil {
-		slog.Info("Failed to get resource rating stats", "resource_id", resourceID, "error", err.Error())
+		slog.Error("Failed to get resource rating stats", "resource_id", resourceID, "error", err.Error())
 		httperr.AbortWithError(c, http.StatusInternalServerError, err, "Failed to get stats", nil)
 		return
 	}
 	c.JSON(http.StatusOK, resdto.FromResourceRatingStats(stats))
+}
+
+// parses common list parameters such as limit and after cursor.
+func parseListParams(c *gin.Context) (int, *queries.Cursor) {
+	// Default limit; queries side also validates.
+	limit := 20
+	if v := c.Query("limit"); v != "" {
+		if iv, e := strconv.Atoi(v); e == nil {
+			limit = iv
+		}
+	}
+	// Pass raw cursor; queries decode (single source of truth).
+	var cursor *queries.Cursor
+	if after := c.Query("after"); after != "" {
+		cursor = &queries.Cursor{After: after}
+	}
+	return limit, cursor
 }

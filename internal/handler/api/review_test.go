@@ -719,14 +719,14 @@ func (s *ReviewHandlerTestSuite) TestListByUser() {
 			{
 				name:           "クエリ失敗",
 				queriesError:   queries.ErrReviewQueryFailed,
-				expectedStatus: http.StatusForbidden,
-				expectedMsg:    "Access denied",
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Internal error",
 			},
 			{
 				name:           "内部サーバーエラー",
 				queriesError:   errors.New("database error"),
-				expectedStatus: http.StatusForbidden,
-				expectedMsg:    "Access denied",
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Internal error",
 			},
 		}
 
