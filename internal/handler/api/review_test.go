@@ -741,24 +741,24 @@ func (s *ReviewHandlerTestSuite) TestResourceRatingStats() {
 			expectedStatus int
 			expectedMsg    string
 		}{
-            {
-                name:           "stats not found",
-                queriesError:   queries.ErrReviewNotFound,
-                expectedStatus: http.StatusInternalServerError,
-                expectedMsg:    "Failed to get stats",
-            },
-            {
-                name:           "query failed",
-                queriesError:   queries.ErrReviewQueryFailed,
-                expectedStatus: http.StatusInternalServerError,
-                expectedMsg:    "Failed to get stats",
-            },
-            {
-                name:           "internal server error",
-                queriesError:   errors.New("database error"),
-                expectedStatus: http.StatusInternalServerError,
-                expectedMsg:    "Failed to get stats",
-            },
+			{
+				name:           "stats not found",
+				queriesError:   queries.ErrReviewNotFound,
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Failed to get stats",
+			},
+			{
+				name:           "query failed",
+				queriesError:   queries.ErrReviewQueryFailed,
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Failed to get stats",
+			},
+			{
+				name:           "internal server error",
+				queriesError:   errors.New("database error"),
+				expectedStatus: http.StatusInternalServerError,
+				expectedMsg:    "Failed to get stats",
+			},
 		}
 
 		for _, tc := range testCases {
