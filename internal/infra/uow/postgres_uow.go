@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/infra/readstore"
-	"gin-clean-starter/internal/infra/repository"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/shared"
@@ -35,12 +34,35 @@ var (
 type PostgresUoW struct {
 	pool *pgxpool.Pool
 	q    *sqlc.Queries
+
+	// write repositories provided via DI
+	reservationRepo  shared.ReservationRepository
+	reviewRepo       shared.ReviewRepository
+	ratingStatsRepo  shared.RatingStatsRepository
+	idempotencyRepo  shared.IdempotencyRepository
+	notificationRepo shared.NotificationRepository
+	userRepo         shared.UserRepository
 }
 
-func NewPostgresUoW(pool *pgxpool.Pool, q *sqlc.Queries) shared.UnitOfWork {
+func NewPostgresUoW(
+	pool *pgxpool.Pool,
+	q *sqlc.Queries,
+	reservationRepo shared.ReservationRepository,
+	reviewRepo shared.ReviewRepository,
+	ratingStatsRepo shared.RatingStatsRepository,
+	idempotencyRepo shared.IdempotencyRepository,
+	notificationRepo shared.NotificationRepository,
+	userRepo shared.UserRepository,
+) shared.UnitOfWork {
 	return &PostgresUoW{
-		pool: pool,
-		q:    q,
+		pool:             pool,
+		q:                q,
+		reservationRepo:  reservationRepo,
+		reviewRepo:       reviewRepo,
+		ratingStatsRepo:  ratingStatsRepo,
+		idempotencyRepo:  idempotencyRepo,
+		notificationRepo: notificationRepo,
+		userRepo:         userRepo,
 	}
 }
 
@@ -199,42 +221,43 @@ func (t *pgTx) DB() sqlc.DBTX {
 
 func (t *pgTx) Reservations() shared.ReservationRepository {
 	if t.reservationRepo == nil {
-		t.reservationRepo = repository.NewReservationRepository(t.uow.q, t.dbtx)
+		// use repository injected into UoW
+		t.reservationRepo = t.uow.reservationRepo
 	}
 	return t.reservationRepo
 }
 
 func (t *pgTx) Reviews() shared.ReviewRepository {
 	if t.reviewRepo == nil {
-		t.reviewRepo = repository.NewReviewRepository(t.uow.q, t.dbtx)
+		t.reviewRepo = t.uow.reviewRepo
 	}
 	return t.reviewRepo
 }
 
 func (t *pgTx) RatingStats() shared.RatingStatsRepository {
 	if t.ratingStatsRepo == nil {
-		t.ratingStatsRepo = repository.NewRatingStatsRepository(t.uow.q, t.dbtx)
+		t.ratingStatsRepo = t.uow.ratingStatsRepo
 	}
 	return t.ratingStatsRepo
 }
 
 func (t *pgTx) Idempotency() shared.IdempotencyRepository {
 	if t.idempotencyRepo == nil {
-		t.idempotencyRepo = repository.NewIdempotencyRepository(t.uow.q, t.dbtx)
+		t.idempotencyRepo = t.uow.idempotencyRepo
 	}
 	return t.idempotencyRepo
 }
 
 func (t *pgTx) Notifications() shared.NotificationRepository {
 	if t.notificationRepo == nil {
-		t.notificationRepo = repository.NewNotificationRepository(t.uow.q, t.dbtx)
+		t.notificationRepo = t.uow.notificationRepo
 	}
 	return t.notificationRepo
 }
 
 func (t *pgTx) Users() shared.UserRepository {
 	if t.userRepo == nil {
-		t.userRepo = repository.NewUserRepository(t.uow.q)
+		t.userRepo = t.uow.userRepo
 	}
 	return t.userRepo
 }

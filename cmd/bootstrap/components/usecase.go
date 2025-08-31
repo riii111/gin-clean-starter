@@ -17,15 +17,24 @@ var UseCaseModule = fx.Module("usecase",
 			reservation.NewDefaultPriceCalculator,
 			fx.As(new(reservation.PriceCalculator)),
 		),
+		// Aggregated domain services
 		func(clock clock.Clock, calc reservation.PriceCalculator) *reservation.Services {
 			return &reservation.Services{
 				Clock:           clock,
 				PriceCalculator: calc,
 			}
 		},
-		commands.NewAuthCommands,
+
+		// Queries
 		queries.NewUserQueries,
+		queries.NewReservationQueries,
+		queries.NewReviewQueries,
+
+		// Validators / helpers
 		usecase.NewTokenValidator,
+
+		// Commands
+		commands.NewAuthCommands,
 		commands.NewReservationCommands,
 		commands.NewReviewCommands,
 	),
