@@ -24,7 +24,7 @@ type IdempotencyRepository struct {
 	db      sqlc.DBTX
 }
 
-func NewIdempotencyRepository(queries *sqlc.Queries, db sqlc.DBTX) *IdempotencyRepository {
+func NewIdempotencyRepository(queries IdempotencyWriteQueries, db sqlc.DBTX) *IdempotencyRepository {
 	return &IdempotencyRepository{
 		queries: queries,
 		db:      db,

@@ -21,7 +21,7 @@ type NotificationRepository struct {
 	db      sqlc.DBTX
 }
 
-func NewNotificationRepository(queries *sqlc.Queries, db sqlc.DBTX) *NotificationRepository {
+func NewNotificationRepository(queries NotificationWriteQueries, db sqlc.DBTX) *NotificationRepository {
 	return &NotificationRepository{
 		queries: queries,
 		db:      db,

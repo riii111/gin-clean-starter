@@ -86,9 +86,9 @@ func TestFindByEmail(t *testing.T) {
 			mockQueries := new(MockUserReadQueries)
 			mockQueries.On("FindUserByEmail", mock.Anything, mock.Anything, tt.email).Return(tt.mockReturn, tt.mockError)
 
-			readStore := NewUserReadStore(mockQueries, nil)
+			readStore := NewUserReadStore(mockQueries)
 
-			userReadModel, hash, err := readStore.FindByEmail(context.Background(), tt.email)
+			userReadModel, hash, err := readStore.FindByEmail(context.Background(), (sqlc.DBTX)(nil), tt.email)
 
 			if tt.wantError {
 				assert.Error(t, err)
@@ -190,9 +190,9 @@ func TestFindByID(t *testing.T) {
 			mockQueries := new(MockUserReadQueries)
 			mockQueries.On("FindUserByID", mock.Anything, mock.Anything, tt.userID).Return(tt.mockReturn, tt.mockError)
 
-			readStore := NewUserReadStore(mockQueries, nil)
+			readStore := NewUserReadStore(mockQueries)
 
-			userReadModel, err := readStore.FindByID(context.Background(), tt.userID)
+			userReadModel, err := readStore.FindByID(context.Background(), (sqlc.DBTX)(nil), tt.userID)
 
 			if tt.wantError {
 				assert.Error(t, err)

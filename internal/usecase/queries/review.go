@@ -5,7 +5,9 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/infra"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
 )
@@ -56,12 +58,12 @@ type ReviewFilters struct {
 }
 
 type ReviewReadStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*ReviewView, error)
-	FindByResourceFirstPage(ctx context.Context, resourceID uuid.UUID, limit int32, minRating, maxRating *int) ([]*ReviewListItem, error)
-	FindByResourceKeyset(ctx context.Context, resourceID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32, minRating, maxRating *int) ([]*ReviewListItem, error)
-	FindByUserFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReviewListItem, error)
-	FindByUserKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReviewListItem, error)
-	GetResourceRatingStats(ctx context.Context, resourceID uuid.UUID) (*ResourceRatingStats, error)
+	FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*ReviewView, error)
+	FindByResourceFirstPage(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID, limit int32, minRating, maxRating *int) ([]*ReviewListItem, error)
+	FindByResourceKeyset(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32, minRating, maxRating *int) ([]*ReviewListItem, error)
+	FindByUserFirstPage(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, limit int32) ([]*ReviewListItem, error)
+	FindByUserKeyset(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReviewListItem, error)
+	GetResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) (*ResourceRatingStats, error)
 }
 
 type ReviewQueries interface {
@@ -72,15 +74,17 @@ type ReviewQueries interface {
 }
 
 type reviewQueriesImpl struct {
+	uow  shared.UnitOfWork
 	repo ReviewReadStore
 }
 
-func NewReviewQueries(rs ReviewReadStore) ReviewQueries {
-	return &reviewQueriesImpl{repo: rs}
+func NewReviewQueries(uow shared.UnitOfWork, rs ReviewReadStore) ReviewQueries {
+	return &reviewQueriesImpl{uow: uow, repo: rs}
 }
 
 func (q *reviewQueriesImpl) GetByID(ctx context.Context, id uuid.UUID) (*ReviewView, error) {
-	rv, err := q.repo.FindByID(ctx, id)
+	db := q.uow.DB(ctx)
+	rv, err := q.repo.FindByID(ctx, db, id)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrReviewNotFound
@@ -94,14 +98,15 @@ func (q *reviewQueriesImpl) ListByResource(ctx context.Context, resourceID uuid.
 	limit = ValidateLimit(limit)
 	var rows []*ReviewListItem
 	var err error
+	db := q.uow.DB(ctx)
 	if cursor == nil || cursor.After == "" {
-		rows, err = q.repo.FindByResourceFirstPage(ctx, resourceID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
+		rows, err = q.repo.FindByResourceFirstPage(ctx, db, resourceID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
 			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
-		rows, err = q.repo.FindByResourceKeyset(ctx, resourceID, lastCreatedAt, lastID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
+		rows, err = q.repo.FindByResourceKeyset(ctx, db, resourceID, lastCreatedAt, lastID, ToPgFetchLimit(limit), filters.MinRating, filters.MaxRating)
 	}
 	if err != nil {
 		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
@@ -129,14 +134,15 @@ func (q *reviewQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, ac
 	limit = ValidateLimit(limit)
 	var rows []*ReviewListItem
 	var err error
+	db := q.uow.DB(ctx)
 	if cursor == nil || cursor.After == "" {
-		rows, err = q.repo.FindByUserFirstPage(ctx, userID, ToPgFetchLimit(limit))
+		rows, err = q.repo.FindByUserFirstPage(ctx, db, userID, ToPgFetchLimit(limit))
 	} else {
 		lastCreatedAt, lastID, derr := DecodeAfterCursor(cursor.After)
 		if derr != nil {
 			return nil, nil, errs.Mark(derr, ErrInvalidCursorQuery)
 		}
-		rows, err = q.repo.FindByUserKeyset(ctx, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
+		rows, err = q.repo.FindByUserKeyset(ctx, db, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
 	}
 	if err != nil {
 		return nil, nil, errs.Mark(err, ErrReviewQueryFailed)
@@ -151,7 +157,8 @@ func (q *reviewQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUID, ac
 }
 
 func (q *reviewQueriesImpl) GetResourceRatingStats(ctx context.Context, resourceID uuid.UUID) (*ResourceRatingStats, error) {
-	stats, err := q.repo.GetResourceRatingStats(ctx, resourceID)
+	db := q.uow.DB(ctx)
+	stats, err := q.repo.GetResourceRatingStats(ctx, db, resourceID)
 	if err != nil {
 		return nil, errs.Mark(err, ErrReviewQueryFailed)
 	}

@@ -11,6 +11,7 @@ import (
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/pgconv"
 	"gin-clean-starter/internal/usecase/queries"
+	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
 )
@@ -23,18 +24,16 @@ type ReservationViewQueries interface {
 
 type ReservationReadStore struct {
 	queries ReservationViewQueries
-	db      sqlc.DBTX
 }
 
-func NewReservationReadStore(queries *sqlc.Queries, db sqlc.DBTX) *ReservationReadStore {
+func NewReservationReadStore(queries ReservationViewQueries) *ReservationReadStore {
 	return &ReservationReadStore{
 		queries: queries,
-		db:      db,
 	}
 }
 
-func (r *ReservationReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.ReservationView, error) {
-	row, err := r.queries.GetReservationByID(ctx, r.db, id)
+func (r *ReservationReadStore) FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*queries.ReservationView, error) {
+	row, err := r.queries.GetReservationByID(ctx, db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("reservation not found", err, infra.KindNotFound)
@@ -63,13 +62,13 @@ func rowToReservationView(row sqlc.GetReservationByIDRow) *queries.ReservationVi
 	}
 }
 
-func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
+func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
 	params := sqlc.GetReservationsByUserIDFirstPageParams{
 		UserID: userID,
 		Limit:  limit,
 	}
 
-	rows, err := r.queries.GetReservationsByUserIDFirstPage(ctx, r.db, params)
+	rows, err := r.queries.GetReservationsByUserIDFirstPage(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to find reservations first page", err)
 	}
@@ -82,7 +81,7 @@ func (r *ReservationReadStore) FindByUserIDFirstPage(ctx context.Context, userID
 	return result, nil
 }
 
-func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
+func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReservationListItem, error) {
 	params := sqlc.GetReservationsByUserIDKeysetParams{
 		UserID:    userID,
 		CreatedAt: pgconv.TimeToPgtype(lastCreatedAt),
@@ -90,7 +89,7 @@ func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uu
 		Limit:     limit,
 	}
 
-	rows, err := r.queries.GetReservationsByUserIDKeyset(ctx, r.db, params)
+	rows, err := r.queries.GetReservationsByUserIDKeyset(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to find reservations keyset", err)
 	}
@@ -101,6 +100,37 @@ func (r *ReservationReadStore) FindByUserIDKeyset(ctx context.Context, userID uu
 	}
 
 	return result, nil
+}
+
+func (r *ReservationReadStore) FindSnapshotByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*shared.ReservationSnapshot, error) {
+	row, err := r.queries.GetReservationByID(ctx, db, id)
+	if err != nil {
+		if pgconv.IsNoRows(err) {
+			return nil, infra.WrapRepoErr("reservation not found", err, infra.KindNotFound)
+		}
+		return nil, infra.WrapRepoErr("failed to find reservation by ID", err)
+	}
+	endTime := parseSlotEndTime(formatTstzrangeToISO8601(row.RSlot))
+	snap := &shared.ReservationSnapshot{
+		ID:         row.ID,
+		ResourceID: row.ResourceID,
+		UserID:     row.UserID,
+		Status:     row.Status,
+		EndTime:    endTime,
+	}
+	return snap, nil
+}
+
+func parseSlotEndTime(slot string) time.Time {
+	parts := strings.Split(slot, "/")
+	if len(parts) != 2 {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, parts[1])
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 func toReservationListItemFromUserFirstPageRow(row sqlc.GetReservationsByUserIDFirstPageRow) *queries.ReservationListItem {

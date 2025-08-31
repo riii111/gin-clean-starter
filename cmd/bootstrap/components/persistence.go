@@ -25,6 +25,33 @@ var baseOption = fx.Provide(
 
 var readstoreModule = fx.Module("persistence/readstore",
 	fx.Provide(
+		// Resource (commands)
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.ResourceReadQueries)),
+		),
+		fx.Annotate(
+			readstore.NewResourceReadStore,
+			fx.As(new(shared.ResourceReadStore)),
+		),
+		// Coupon (commands)
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.CouponReadQueries)),
+		),
+		fx.Annotate(
+			readstore.NewCouponReadStore,
+			fx.As(new(shared.CouponReadStore)),
+		),
+		// Idempotency (commands)
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(readstore.IdempotencyReadQueries)),
+		),
+		fx.Annotate(
+			readstore.NewIdempotencyReadStore,
+			fx.As(new(shared.IdempotencyReadStore)),
+		),
 		// User
 		fx.Annotate(
 			NewSQLQueries,
@@ -42,6 +69,7 @@ var readstoreModule = fx.Module("persistence/readstore",
 		fx.Annotate(
 			readstore.NewReservationReadStore,
 			fx.As(new(queries.ReservationReadStore)),
+			fx.As(new(shared.ReservationSnapshotReadStore)),
 		),
 		// Review
 		fx.Annotate(
@@ -51,6 +79,7 @@ var readstoreModule = fx.Module("persistence/readstore",
 		fx.Annotate(
 			readstore.NewReviewReadStore,
 			fx.As(new(queries.ReviewReadStore)),
+			fx.As(new(shared.ReviewReadStore)),
 		),
 	),
 )

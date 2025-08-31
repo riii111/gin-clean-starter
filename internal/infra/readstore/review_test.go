@@ -84,11 +84,11 @@ func TestReadStore_FindByID(t *testing.T) {
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 
 			tc.setupMock(mockQueries, reviewID)
 
-			result, actualError := store.FindByID(ctx, reviewID)
+			result, actualError := store.FindByID(ctx, mockDB, reviewID)
 
 			if tc.expectedError {
 				require.Error(t, actualError)
@@ -305,12 +305,12 @@ func runReviewTestCases(t *testing.T, ctx context.Context, testCases []ReviewTes
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 			resourceID := uuid.New()
 
 			tc.setupMock(mockQueries)
 
-			results, actualError := store.FindByResourceFirstPage(ctx, resourceID, tc.limit, tc.minRating, tc.maxRating)
+			results, actualError := store.FindByResourceFirstPage(ctx, mockDB, resourceID, tc.limit, tc.minRating, tc.maxRating)
 
 			if tc.expectedError {
 				require.Error(t, actualError)
@@ -538,14 +538,14 @@ func runKeysetReviewTestCases(t *testing.T, ctx context.Context, testCases []Rev
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 			resourceID := uuid.New()
 			lastCreatedAt := time.Now()
 			lastID := uuid.New()
 
 			tc.setupMock(mockQueries)
 
-			results, actualError := store.FindByResourceKeyset(ctx, resourceID, lastCreatedAt, lastID, tc.limit, tc.minRating, tc.maxRating)
+			results, actualError := store.FindByResourceKeyset(ctx, mockDB, resourceID, lastCreatedAt, lastID, tc.limit, tc.minRating, tc.maxRating)
 
 			if tc.expectedError {
 				require.Error(t, actualError)
@@ -670,12 +670,12 @@ func runUserReviewTestCases(t *testing.T, ctx context.Context, testCases []UserR
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 			userID := uuid.New()
 
 			tc.setupMock(mockQueries)
 
-			results, actualError := store.FindByUserFirstPage(ctx, userID, tc.limit)
+			results, actualError := store.FindByUserFirstPage(ctx, mockDB, userID, tc.limit)
 
 			if tc.expectedError {
 				require.Error(t, actualError)
@@ -787,14 +787,14 @@ func runUserKeysetTestCases(t *testing.T, ctx context.Context, testCases []UserK
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 			userID := uuid.New()
 			lastCreatedAt := time.Now()
 			lastID := uuid.New()
 
 			tc.setupMock(mockQueries)
 
-			results, actualError := store.FindByUserKeyset(ctx, userID, lastCreatedAt, lastID, tc.limit)
+			results, actualError := store.FindByUserKeyset(ctx, mockDB, userID, lastCreatedAt, lastID, tc.limit)
 
 			if tc.expectedError {
 				require.Error(t, actualError)
@@ -956,12 +956,12 @@ func runRatingStatsTestCases(t *testing.T, ctx context.Context, testCases []Rati
 
 			mockQueries := readstoremock.NewMockReviewReadQueries(ctrl)
 			mockDB := &mockDBTX{}
-			store := readstore.NewReviewReadStore(mockQueries, mockDB)
+			store := readstore.NewReviewReadStore(mockQueries)
 			resourceID := uuid.New()
 
 			tc.setupMock(mockQueries, resourceID)
 
-			result, actualError := store.GetResourceRatingStats(ctx, resourceID)
+			result, actualError := store.GetResourceRatingStats(ctx, mockDB, resourceID)
 
 			if tc.expectedError {
 				require.Error(t, actualError)

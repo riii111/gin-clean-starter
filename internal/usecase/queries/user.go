@@ -6,7 +6,9 @@ import (
 	"github.com/google/uuid"
 
 	"gin-clean-starter/internal/infra"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/usecase/shared"
 )
 
 var (
@@ -20,22 +22,25 @@ type UserQueries interface {
 }
 
 type UserReadStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*AuthorizedUserView, error)
-	FindByEmail(ctx context.Context, email string) (*AuthorizedUserView, string, error)
+	FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*AuthorizedUserView, error)
+	FindByEmail(ctx context.Context, db sqlc.DBTX, email string) (*AuthorizedUserView, string, error)
 }
 
 type userQueriesImpl struct {
+	uow       shared.UnitOfWork
 	readStore UserReadStore
 }
 
-func NewUserQueries(readStore UserReadStore) UserQueries {
+func NewUserQueries(uow shared.UnitOfWork, readStore UserReadStore) UserQueries {
 	return &userQueriesImpl{
+		uow:       uow,
 		readStore: readStore,
 	}
 }
 
 func (q *userQueriesImpl) GetCurrentUser(ctx context.Context, userID uuid.UUID) (*AuthorizedUserView, error) {
-	user, err := q.readStore.FindByID(ctx, userID)
+	db := q.uow.DB(ctx)
+	user, err := q.readStore.FindByID(ctx, db, userID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, ErrUserNotFound
