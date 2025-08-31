@@ -12,12 +12,19 @@ import (
 	"go.uber.org/fx"
 )
 
-var PersistenceModule = fx.Module("repository",
-	fx.Provide(
-		// base
-		NewSQLQueries,
-		NewDBTX,
+var PersistenceModule = fx.Module("persistence",
+	baseOption,
+	readstoreModule,
+	repositoryModule,
+)
 
+var baseOption = fx.Provide(
+	NewSQLQueries,
+	NewDBTX,
+)
+
+var readstoreModule = fx.Module("persistence/readstore",
+	fx.Provide(
 		// User
 		fx.Annotate(
 			NewSQLQueries,
@@ -27,25 +34,15 @@ var PersistenceModule = fx.Module("repository",
 			readstore.NewUserReadStore,
 			fx.As(new(queries.UserReadStore)),
 		),
+		// Reservation
 		fx.Annotate(
 			NewSQLQueries,
-			fx.As(new(repository.UserWriteQueries)),
+			fx.As(new(readstore.ReservationViewQueries)),
 		),
-		fx.Annotate(
-			repository.NewUserRepository,
-			fx.As(new(shared.UserRepository)),
-		),
-
-		// Reservation
 		fx.Annotate(
 			readstore.NewReservationReadStore,
 			fx.As(new(queries.ReservationReadStore)),
 		),
-		fx.Annotate(
-			repository.NewReservationRepository,
-			fx.As(new(shared.ReservationRepository)),
-		),
-
 		// Review
 		fx.Annotate(
 			NewSQLQueries,
@@ -55,6 +52,35 @@ var PersistenceModule = fx.Module("repository",
 			readstore.NewReviewReadStore,
 			fx.As(new(queries.ReviewReadStore)),
 		),
+	),
+)
+
+var repositoryModule = fx.Module("persistence/repository",
+	fx.Provide(
+		// UnitOfWork
+		fx.Annotate(
+			uow.NewPostgresUoW,
+			fx.As(new(shared.UnitOfWork)),
+		),
+		// User
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(repository.UserWriteQueries)),
+		),
+		fx.Annotate(
+			repository.NewUserRepository,
+			fx.As(new(shared.UserRepository)),
+		),
+		// Reservation
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(repository.ReservationWriteQueries)),
+		),
+		fx.Annotate(
+			repository.NewReservationRepository,
+			fx.As(new(shared.ReservationRepository)),
+		),
+		// Review
 		fx.Annotate(
 			NewSQLQueries,
 			fx.As(new(repository.ReviewWriteQueries)),
@@ -63,7 +89,6 @@ var PersistenceModule = fx.Module("repository",
 			repository.NewReviewRepository,
 			fx.As(new(shared.ReviewRepository)),
 		),
-
 		// RatingStats
 		fx.Annotate(
 			NewSQLQueries,
@@ -73,23 +98,23 @@ var PersistenceModule = fx.Module("repository",
 			repository.NewRatingStatsRepository,
 			fx.As(new(shared.RatingStatsRepository)),
 		),
-
 		// Idempotency
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(repository.IdempotencyWriteQueries)),
+		),
 		fx.Annotate(
 			repository.NewIdempotencyRepository,
 			fx.As(new(shared.IdempotencyRepository)),
 		),
-
 		// Notification
+		fx.Annotate(
+			NewSQLQueries,
+			fx.As(new(repository.NotificationWriteQueries)),
+		),
 		fx.Annotate(
 			repository.NewNotificationRepository,
 			fx.As(new(shared.NotificationRepository)),
-		),
-
-		// UnitOfWork
-		fx.Annotate(
-			uow.NewPostgresUoW,
-			fx.As(new(shared.UnitOfWork)),
 		),
 	),
 )
