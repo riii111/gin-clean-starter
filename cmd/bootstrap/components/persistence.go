@@ -25,7 +25,7 @@ var baseOption = fx.Provide(
 
 var readstoreModule = fx.Module("persistence/readstore",
 	fx.Provide(
-		// Resource (commands)
+		// Resource
 		fx.Annotate(
 			NewSQLQueries,
 			fx.As(new(readstore.ResourceReadQueries)),
@@ -34,7 +34,7 @@ var readstoreModule = fx.Module("persistence/readstore",
 			readstore.NewResourceReadStore,
 			fx.As(new(shared.ResourceReadStore)),
 		),
-		// Coupon (commands)
+		// Coupon
 		fx.Annotate(
 			NewSQLQueries,
 			fx.As(new(readstore.CouponReadQueries)),
@@ -43,7 +43,7 @@ var readstoreModule = fx.Module("persistence/readstore",
 			readstore.NewCouponReadStore,
 			fx.As(new(shared.CouponReadStore)),
 		),
-		// Idempotency (commands)
+		// Idempotency
 		fx.Annotate(
 			NewSQLQueries,
 			fx.As(new(readstore.IdempotencyReadQueries)),
