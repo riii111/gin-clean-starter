@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"gin-clean-starter/internal/infra"
+	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/errs"
+	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
 )
@@ -31,17 +33,18 @@ type ReservationQueries interface {
 }
 
 type ReservationReadStore interface {
-	FindByID(ctx context.Context, id uuid.UUID) (*ReservationView, error)
-	FindByUserIDFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
-	FindByUserIDKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
+	FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*ReservationView, error)
+	FindByUserIDFirstPage(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, limit int32) ([]*ReservationListItem, error)
+	FindByUserIDKeyset(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*ReservationListItem, error)
 }
 
 type reservationQueriesImpl struct {
-	rs ReservationReadStore
+	uow shared.UnitOfWork
+	rs  ReservationReadStore
 }
 
-func NewReservationQueries(repo ReservationReadStore) ReservationQueries {
-	return &reservationQueriesImpl{rs: repo}
+func NewReservationQueries(uow shared.UnitOfWork, repo ReservationReadStore) ReservationQueries {
+	return &reservationQueriesImpl{uow: uow, rs: repo}
 }
 
 func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, id uuid.UUID) (*ReservationView, error) {
@@ -49,7 +52,8 @@ func (q *reservationQueriesImpl) GetByID(ctx context.Context, actor uuid.UUID, i
 }
 
 func (q *reservationQueriesImpl) GetByIDWithRole(ctx context.Context, actorID uuid.UUID, actorRole string, id uuid.UUID) (*ReservationView, error) {
-	reservation, err := q.rs.FindByID(ctx, id)
+	db := q.uow.DB(ctx)
+	reservation, err := q.rs.FindByID(ctx, db, id)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return nil, errs.Mark(err, ErrReservationNotFound)
@@ -69,15 +73,16 @@ func (q *reservationQueriesImpl) ListByUser(ctx context.Context, userID uuid.UUI
 
 	var rows []*ReservationListItem
 	var err error
+	db := q.uow.DB(ctx)
 
 	if after == nil || after.After == "" {
-		rows, err = q.rs.FindByUserIDFirstPage(ctx, userID, ToPgFetchLimit(limit))
+		rows, err = q.rs.FindByUserIDFirstPage(ctx, db, userID, ToPgFetchLimit(limit))
 	} else {
 		lastCreatedAt, lastID, decodeErr := DecodeAfterCursor(after.After)
 		if decodeErr != nil {
 			return nil, nil, errs.Mark(decodeErr, ErrInvalidCursor)
 		}
-		rows, err = q.rs.FindByUserIDKeyset(ctx, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
+		rows, err = q.rs.FindByUserIDKeyset(ctx, db, userID, lastCreatedAt, lastID, ToPgFetchLimit(limit))
 	}
 
 	if err != nil {

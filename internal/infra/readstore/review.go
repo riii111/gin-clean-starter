@@ -8,6 +8,7 @@ import (
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/pgconv"
 	"gin-clean-starter/internal/usecase/queries"
+	"gin-clean-starter/internal/usecase/shared"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -24,18 +25,16 @@ type ReviewReadQueries interface {
 
 type ReviewReadStore struct {
 	queries ReviewReadQueries
-	db      sqlc.DBTX
 }
 
-func NewReviewReadStore(queries ReviewReadQueries, db sqlc.DBTX) *ReviewReadStore {
+func NewReviewReadStore(queries ReviewReadQueries) *ReviewReadStore {
 	return &ReviewReadStore{
 		queries: queries,
-		db:      db,
 	}
 }
 
-func (r *ReviewReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.ReviewView, error) {
-	row, err := r.queries.GetReviewViewByID(ctx, r.db, id)
+func (r *ReviewReadStore) FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*queries.ReviewView, error) {
+	row, err := r.queries.GetReviewViewByID(ctx, db, id)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("review not found", err, infra.KindNotFound)
@@ -56,7 +55,7 @@ func (r *ReviewReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.
 	}, nil
 }
 
-func (r *ReviewReadStore) FindByResourceFirstPage(ctx context.Context, resourceID uuid.UUID, limit int32, minRating, maxRating *int) ([]*queries.ReviewListItem, error) {
+func (r *ReviewReadStore) FindByResourceFirstPage(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID, limit int32, minRating, maxRating *int) ([]*queries.ReviewListItem, error) {
 	params := sqlc.GetReviewsByResourceFirstPageParams{
 		ResourceID: resourceID,
 		Limit:      limit,
@@ -64,14 +63,14 @@ func (r *ReviewReadStore) FindByResourceFirstPage(ctx context.Context, resourceI
 		MaxRating:  toPgInt4(maxRating),
 	}
 
-	rows, err := r.queries.GetReviewsByResourceFirstPage(ctx, r.db, params)
+	rows, err := r.queries.GetReviewsByResourceFirstPage(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to get reviews first page by resource", err)
 	}
 	return mapResourceFirstPageRows(rows), nil
 }
 
-func (r *ReviewReadStore) FindByResourceKeyset(ctx context.Context, resourceID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32, minRating, maxRating *int) ([]*queries.ReviewListItem, error) {
+func (r *ReviewReadStore) FindByResourceKeyset(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32, minRating, maxRating *int) ([]*queries.ReviewListItem, error) {
 	params := sqlc.GetReviewsByResourceKeysetParams{
 		ResourceID: resourceID,
 		CreatedAt:  pgconv.TimeToPgtype(lastCreatedAt),
@@ -80,38 +79,38 @@ func (r *ReviewReadStore) FindByResourceKeyset(ctx context.Context, resourceID u
 		MinRating:  toPgInt4(minRating),
 		MaxRating:  toPgInt4(maxRating),
 	}
-	rows, err := r.queries.GetReviewsByResourceKeyset(ctx, r.db, params)
+	rows, err := r.queries.GetReviewsByResourceKeyset(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to get reviews keyset by resource", err)
 	}
 	return mapResourceKeysetRows(rows), nil
 }
 
-func (r *ReviewReadStore) FindByUserFirstPage(ctx context.Context, userID uuid.UUID, limit int32) ([]*queries.ReviewListItem, error) {
+func (r *ReviewReadStore) FindByUserFirstPage(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, limit int32) ([]*queries.ReviewListItem, error) {
 	params := sqlc.GetReviewsByUserFirstPageParams{UserID: userID, Limit: limit}
-	rows, err := r.queries.GetReviewsByUserFirstPage(ctx, r.db, params)
+	rows, err := r.queries.GetReviewsByUserFirstPage(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to get reviews first page by user", err)
 	}
 	return mapUserFirstPageRows(rows), nil
 }
 
-func (r *ReviewReadStore) FindByUserKeyset(ctx context.Context, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReviewListItem, error) {
+func (r *ReviewReadStore) FindByUserKeyset(ctx context.Context, db sqlc.DBTX, userID uuid.UUID, lastCreatedAt time.Time, lastID uuid.UUID, limit int32) ([]*queries.ReviewListItem, error) {
 	params := sqlc.GetReviewsByUserKeysetParams{
 		UserID:    userID,
 		CreatedAt: pgconv.TimeToPgtype(lastCreatedAt),
 		ID:        lastID,
 		Limit:     limit,
 	}
-	rows, err := r.queries.GetReviewsByUserKeyset(ctx, r.db, params)
+	rows, err := r.queries.GetReviewsByUserKeyset(ctx, db, params)
 	if err != nil {
 		return nil, infra.WrapRepoErr("failed to get reviews keyset by user", err)
 	}
 	return mapUserKeysetRows(rows), nil
 }
 
-func (r *ReviewReadStore) GetResourceRatingStats(ctx context.Context, resourceID uuid.UUID) (*queries.ResourceRatingStats, error) {
-	row, err := r.queries.GetResourceRatingStats(ctx, r.db, resourceID)
+func (r *ReviewReadStore) GetResourceRatingStats(ctx context.Context, db sqlc.DBTX, resourceID uuid.UUID) (*queries.ResourceRatingStats, error) {
+	row, err := r.queries.GetResourceRatingStats(ctx, db, resourceID)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
 			// return zero stats if not initialized yet
@@ -134,6 +133,25 @@ func (r *ReviewReadStore) GetResourceRatingStats(ctx context.Context, resourceID
 		Rating4Count:  row.Rating4Count,
 		Rating5Count:  row.Rating5Count,
 		UpdatedAt:     pgconv.TimeFromPgtype(row.UpdatedAt),
+	}, nil
+}
+
+// FindSnapshotByID returns a minimal review snapshot for command use cases.
+func (r *ReviewReadStore) FindSnapshotByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*shared.ReviewSnapshot, error) {
+	row, err := r.queries.GetReviewViewByID(ctx, db, id)
+	if err != nil {
+		if pgconv.IsNoRows(err) {
+			return nil, infra.WrapRepoErr("review not found", err, infra.KindNotFound)
+		}
+		return nil, infra.WrapRepoErr("failed to get review view by id", err)
+	}
+	return &shared.ReviewSnapshot{
+		ID:            row.ID,
+		UserID:        row.UserID,
+		ResourceID:    row.ResourceID,
+		ReservationID: row.ReservationID,
+		Rating:        int(row.Rating),
+		Comment:       row.Comment,
 	}, nil
 }
 

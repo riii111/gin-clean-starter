@@ -19,18 +19,16 @@ type UserReadQueries interface {
 
 type UserReadStore struct {
 	queries UserReadQueries
-	db      sqlc.DBTX
 }
 
-func NewUserReadStore(queries UserReadQueries, db sqlc.DBTX) *UserReadStore {
+func NewUserReadStore(queries UserReadQueries) *UserReadStore {
 	return &UserReadStore{
 		queries: queries,
-		db:      db,
 	}
 }
 
-func (r *UserReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.AuthorizedUserView, error) {
-	row, err := r.queries.FindUserByID(ctx, r.db, id)
+func (r *UserReadStore) FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*queries.AuthorizedUserView, error) {
+	row, err := r.queries.FindUserByID(ctx, db, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, infra.WrapRepoErr("user not found", err, infra.KindNotFound)
@@ -42,8 +40,8 @@ func (r *UserReadStore) FindByID(ctx context.Context, id uuid.UUID) (*queries.Au
 	return readModel, nil
 }
 
-func (r *UserReadStore) FindByEmail(ctx context.Context, email string) (*queries.AuthorizedUserView, string, error) {
-	row, err := r.queries.FindUserByEmail(ctx, r.db, email)
+func (r *UserReadStore) FindByEmail(ctx context.Context, db sqlc.DBTX, email string) (*queries.AuthorizedUserView, string, error) {
+	row, err := r.queries.FindUserByEmail(ctx, db, email)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, "", infra.WrapRepoErr("user not found", err, infra.KindNotFound)

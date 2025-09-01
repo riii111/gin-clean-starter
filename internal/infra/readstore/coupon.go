@@ -21,19 +21,17 @@ type CouponStore interface {
 
 type CouponReadStore struct {
 	queries CouponReadQueries
-	db      sqlc.DBTX
 }
 
-func NewCouponReadStore(queries *sqlc.Queries, db sqlc.DBTX) *CouponReadStore {
+func NewCouponReadStore(queries CouponReadQueries) *CouponReadStore {
 	return &CouponReadStore{
 		queries: queries,
-		db:      db,
 	}
 }
 
-func (r *CouponReadStore) FindByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error) {
+func (r *CouponReadStore) FindByCode(ctx context.Context, db sqlc.DBTX, code string) (*shared.CouponSnapshot, error) {
 	normalizedCode := strings.ToLower(code)
-	row, err := r.queries.GetCouponByCode(ctx, r.db, normalizedCode)
+	row, err := r.queries.GetCouponByCode(ctx, db, normalizedCode)
 	if err != nil {
 		if pgconv.IsNoRows(err) {
 			return nil, infra.WrapRepoErr("coupon not found", err, infra.KindNotFound)

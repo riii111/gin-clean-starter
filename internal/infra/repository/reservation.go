@@ -20,7 +20,7 @@ type ReservationRepository struct {
 	db      sqlc.DBTX
 }
 
-func NewReservationRepository(queries *sqlc.Queries, db sqlc.DBTX) *ReservationRepository {
+func NewReservationRepository(queries ReservationWriteQueries, db sqlc.DBTX) *ReservationRepository {
 	return &ReservationRepository{
 		queries: queries,
 		db:      db,

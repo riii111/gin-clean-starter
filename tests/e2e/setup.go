@@ -242,7 +242,7 @@ func buildE2EApp(pool *pgxpool.Pool, dbConfig config.DBConfig) (*gin.Engine, con
 		fx.Provide(func() *gin.Engine { return gin.New() }),
 		bootstrap.LoggerModule,
 		bootstrap.JWTModule,
-		components.RepositoryModule,
+		components.PersistenceModule,
 		components.UseCaseModule,
 		components.HandlerModule,
 

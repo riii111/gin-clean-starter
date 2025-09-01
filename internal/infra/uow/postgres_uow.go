@@ -6,16 +6,12 @@ import (
 	"encoding/binary"
 	"errors"
 	"log/slog"
-	"strings"
 	"time"
 
-	"gin-clean-starter/internal/infra/readstore"
-	"gin-clean-starter/internal/infra/repository"
 	sqlc "gin-clean-starter/internal/infra/sqlc/generated"
 	"gin-clean-starter/internal/pkg/errs"
 	"gin-clean-starter/internal/usecase/shared"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,12 +31,35 @@ var (
 type PostgresUoW struct {
 	pool *pgxpool.Pool
 	q    *sqlc.Queries
+
+	// write repositories provided via DI
+	reservationRepo  shared.ReservationRepository
+	reviewRepo       shared.ReviewRepository
+	ratingStatsRepo  shared.RatingStatsRepository
+	idempotencyRepo  shared.IdempotencyRepository
+	notificationRepo shared.NotificationRepository
+	userRepo         shared.UserRepository
 }
 
-func NewPostgresUoW(pool *pgxpool.Pool, q *sqlc.Queries) shared.UnitOfWork {
+func NewPostgresUoW(
+	pool *pgxpool.Pool,
+	q *sqlc.Queries,
+	reservationRepo shared.ReservationRepository,
+	reviewRepo shared.ReviewRepository,
+	ratingStatsRepo shared.RatingStatsRepository,
+	idempotencyRepo shared.IdempotencyRepository,
+	notificationRepo shared.NotificationRepository,
+	userRepo shared.UserRepository,
+) shared.UnitOfWork {
 	return &PostgresUoW{
-		pool: pool,
-		q:    q,
+		pool:             pool,
+		q:                q,
+		reservationRepo:  reservationRepo,
+		reviewRepo:       reviewRepo,
+		ratingStatsRepo:  ratingStatsRepo,
+		idempotencyRepo:  idempotencyRepo,
+		notificationRepo: notificationRepo,
+		userRepo:         userRepo,
 	}
 }
 
@@ -50,17 +69,7 @@ func (u *PostgresUoW) Within(ctx context.Context, fn func(ctx context.Context, t
 }
 
 // Read-only transaction for consistent multi-table snapshots
-func (u *PostgresUoW) WithinReadOnly(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error {
-	return u.runReadOnlyTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}, fn)
-}
-
-func (u *PostgresUoW) WithDB(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error {
-	return fn(ctx, u.pool)
-}
-
-func (u *PostgresUoW) CommandReads() shared.CommandReads {
-	return &commandReads{uow: u, dbtx: u.pool}
-}
+func (u *PostgresUoW) DB(_ context.Context) sqlc.DBTX { return u.pool }
 
 // Avoids defer accumulation in retry loops to prevent connection leaks
 func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOptions, fn func(ctx context.Context, tx shared.Tx) error) error {
@@ -119,27 +128,6 @@ func (u *PostgresUoW) runInTxWithOptions(ctx context.Context, options pgx.TxOpti
 	return errMaxRetriesExceeded
 }
 
-func (u *PostgresUoW) runReadOnlyTx(ctx context.Context, options pgx.TxOptions, fn func(ctx context.Context, db sqlc.DBTX) error) error {
-	pgxTx, err := u.pool.BeginTx(ctx, options)
-	if err != nil {
-		return errs.Mark(err, errTransactionBegin)
-	}
-
-	defer func() {
-		if rollbackErr := pgxTx.Rollback(ctx); rollbackErr != nil {
-			if !errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				slog.Warn("failed to rollback read-only transaction", "error", rollbackErr.Error())
-			}
-		}
-	}()
-
-	if err := fn(ctx, pgxTx); err != nil {
-		return err
-	}
-
-	return pgxTx.Commit(ctx)
-}
-
 func shouldRetry(err error, attempt, maxRetries int) bool {
 	return isRetryableError(err) && attempt < maxRetries
 }
@@ -182,193 +170,33 @@ func isRetryableError(err error) bool {
 type pgTx struct {
 	dbtx sqlc.DBTX
 	uow  *PostgresUoW
-
-	// Lazy-initialized repositories
-	reservationRepo  shared.ReservationRepository
-	reviewRepo       shared.ReviewRepository
-	ratingStatsRepo  shared.RatingStatsRepository
-	idempotencyRepo  shared.IdempotencyRepository
-	notificationRepo shared.NotificationRepository
-	userRepo         shared.UserRepository
-	commandReads     shared.CommandReads
 }
 
 func (t *pgTx) DB() sqlc.DBTX {
 	return t.dbtx
 }
 
+// Expose write repositories via Tx to signal writes occur within a transaction.
 func (t *pgTx) Reservations() shared.ReservationRepository {
-	if t.reservationRepo == nil {
-		t.reservationRepo = repository.NewReservationRepository(t.uow.q, t.dbtx)
-	}
-	return t.reservationRepo
+	return t.uow.reservationRepo
 }
 
 func (t *pgTx) Reviews() shared.ReviewRepository {
-	if t.reviewRepo == nil {
-		t.reviewRepo = repository.NewReviewRepository(t.uow.q, t.dbtx)
-	}
-	return t.reviewRepo
+	return t.uow.reviewRepo
 }
 
 func (t *pgTx) RatingStats() shared.RatingStatsRepository {
-	if t.ratingStatsRepo == nil {
-		t.ratingStatsRepo = repository.NewRatingStatsRepository(t.uow.q, t.dbtx)
-	}
-	return t.ratingStatsRepo
+	return t.uow.ratingStatsRepo
 }
 
 func (t *pgTx) Idempotency() shared.IdempotencyRepository {
-	if t.idempotencyRepo == nil {
-		t.idempotencyRepo = repository.NewIdempotencyRepository(t.uow.q, t.dbtx)
-	}
-	return t.idempotencyRepo
+	return t.uow.idempotencyRepo
 }
 
 func (t *pgTx) Notifications() shared.NotificationRepository {
-	if t.notificationRepo == nil {
-		t.notificationRepo = repository.NewNotificationRepository(t.uow.q, t.dbtx)
-	}
-	return t.notificationRepo
+	return t.uow.notificationRepo
 }
 
 func (t *pgTx) Users() shared.UserRepository {
-	if t.userRepo == nil {
-		t.userRepo = repository.NewUserRepository(t.uow.q)
-	}
-	return t.userRepo
-}
-
-func (t *pgTx) Reads() shared.CommandReads {
-	if t.commandReads == nil {
-		t.commandReads = &commandReads{
-			uow:  t.uow,
-			dbtx: t.dbtx,
-		}
-	}
-	return t.commandReads
-}
-
-type commandReads struct {
-	uow  *PostgresUoW
-	dbtx sqlc.DBTX
-
-	// Lazy-initialized readstores
-	resourceStore    *readstore.ResourceReadStore
-	couponStore      *readstore.CouponReadStore
-	reservationStore *readstore.ReservationReadStore
-	reviewStore      *readstore.ReviewReadStore
-	idempotencyStore *readstore.IdempotencyReadStore
-}
-
-func (r *commandReads) ResourceByID(ctx context.Context, id uuid.UUID) (*shared.ResourceSnapshot, error) {
-	if r.resourceStore == nil {
-		r.resourceStore = readstore.NewResourceReadStore(r.uow.q, r.dbtx)
-	}
-
-	resource, err := r.resourceStore.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshot := &shared.ResourceSnapshot{
-		ID:          resource.ID,
-		Name:        resource.Name,
-		LeadTimeMin: resource.LeadTimeMin,
-	}
-	return snapshot, nil
-}
-
-func (r *commandReads) CouponByCode(ctx context.Context, code string) (*shared.CouponSnapshot, error) {
-	if r.couponStore == nil {
-		r.couponStore = readstore.NewCouponReadStore(r.uow.q, r.dbtx)
-	}
-
-	coupon, err := r.couponStore.FindByCode(ctx, code)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshot := &shared.CouponSnapshot{
-		ID:             coupon.ID,
-		Code:           coupon.Code,
-		AmountOffCents: coupon.AmountOffCents,
-		PercentOff:     coupon.PercentOff,
-		ValidFrom:      coupon.ValidFrom,
-		ValidTo:        coupon.ValidTo,
-	}
-	return snapshot, nil
-}
-
-func (r *commandReads) ReservationByID(ctx context.Context, id uuid.UUID) (*shared.ReservationSnapshot, error) {
-	if r.reservationStore == nil {
-		r.reservationStore = readstore.NewReservationReadStore(r.uow.q, r.dbtx)
-	}
-
-	reservation, err := r.reservationStore.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-
-	endTime := parseSlotEndTime(reservation.Slot)
-	snapshot := &shared.ReservationSnapshot{
-		ID:         reservation.ID,
-		ResourceID: reservation.ResourceID,
-		UserID:     reservation.UserID,
-		Status:     reservation.Status,
-		EndTime:    endTime,
-	}
-	return snapshot, nil
-}
-
-func parseSlotEndTime(slot string) time.Time {
-	parts := strings.Split(slot, "/")
-	if len(parts) != 2 {
-		return time.Time{}
-	}
-	t, err := time.Parse(time.RFC3339, parts[1])
-	if err != nil {
-		return time.Time{}
-	}
-	return t
-}
-
-func (r *commandReads) IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*shared.IdempotencyRecord, error) {
-	if r.idempotencyStore == nil {
-		r.idempotencyStore = readstore.NewIdempotencyReadStore(r.uow.q)
-	}
-
-	record, err := r.idempotencyStore.Get(ctx, r.dbtx, key, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	snapshot := &shared.IdempotencyRecord{
-		Key:                 record.Key,
-		UserID:              record.UserID,
-		Status:              record.Status,
-		RequestHash:         record.RequestHash,
-		ResultReservationID: record.ResultReservationID,
-		ExpiresAt:           record.ExpiresAt,
-	}
-	return snapshot, nil
-}
-
-func (r *commandReads) ReviewByID(ctx context.Context, id uuid.UUID) (*shared.ReviewSnapshot, error) {
-	if r.reviewStore == nil {
-		r.reviewStore = readstore.NewReviewReadStore(r.uow.q, r.dbtx)
-	}
-	rv, err := r.reviewStore.FindByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	snap := &shared.ReviewSnapshot{
-		ID:            rv.ID,
-		UserID:        rv.UserID,
-		ResourceID:    rv.ResourceID,
-		ReservationID: rv.ReservationID,
-		Rating:        int(rv.Rating),
-		Comment:       rv.Comment,
-	}
-	return snap, nil
+	return t.uow.userRepo
 }

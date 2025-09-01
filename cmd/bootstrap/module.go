@@ -11,7 +11,7 @@ var Module = fx.Options(
 	LoggerModule,
 	DBModule,
 	JWTModule,
-	components.RepositoryModule,
+	components.PersistenceModule,
 	components.UseCaseModule,
 	components.HandlerModule,
 )

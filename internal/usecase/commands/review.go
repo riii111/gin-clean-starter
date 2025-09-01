@@ -36,12 +36,14 @@ type ReviewCommands interface {
 }
 
 type reviewCommandsImpl struct {
-	uow   shared.UnitOfWork
-	clock clock.Clock
+	uow          shared.UnitOfWork
+	clock        clock.Clock
+	reviews      shared.ReviewReadStore
+	reservations shared.ReservationSnapshotReadStore
 }
 
-func NewReviewCommands(uow shared.UnitOfWork, clk clock.Clock) ReviewCommands {
-	return &reviewCommandsImpl{uow: uow, clock: clk}
+func NewReviewCommands(uow shared.UnitOfWork, clk clock.Clock, reviews shared.ReviewReadStore, reservations shared.ReservationSnapshotReadStore) ReviewCommands {
+	return &reviewCommandsImpl{uow: uow, clock: clk, reviews: reviews, reservations: reservations}
 }
 
 func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateReviewRequest, userID uuid.UUID) (*CreateReviewResult, error) {
@@ -75,7 +77,7 @@ func (uc *reviewCommandsImpl) Create(ctx context.Context, req reqdto.CreateRevie
 
 func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, req reqdto.UpdateReviewRequest, actorID uuid.UUID) error {
 	err := uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
-		existing, err := tx.Reads().ReviewByID(ctx, reviewID)
+		existing, err := uc.reviews.FindSnapshotByID(ctx, tx.DB(), reviewID)
 		if err != nil {
 			return errs.Mark(err, ErrReviewNotFoundWrite)
 		}
@@ -108,7 +110,7 @@ func (uc *reviewCommandsImpl) Update(ctx context.Context, reviewID uuid.UUID, re
 
 func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, actorID uuid.UUID, actorRole string) error {
 	err := uc.uow.Within(ctx, func(ctx context.Context, tx shared.Tx) error {
-		snap, derr := tx.Reads().ReviewByID(ctx, reviewID)
+		snap, derr := uc.reviews.FindSnapshotByID(ctx, tx.DB(), reviewID)
 		if derr != nil {
 			return errs.Mark(derr, ErrReviewNotFoundWrite)
 		}
@@ -130,7 +132,8 @@ func (uc *reviewCommandsImpl) Delete(ctx context.Context, reviewID uuid.UUID, ac
 }
 
 func (uc *reviewCommandsImpl) canPostReview(ctx context.Context, userID, resourceID, reservationID uuid.UUID) error {
-	resSnap, err := uc.uow.CommandReads().ReservationByID(ctx, reservationID)
+	db := uc.uow.DB(ctx)
+	resSnap, err := uc.reservations.FindSnapshotByID(ctx, db, reservationID)
 	if err != nil {
 		return errs.Mark(err, ErrReservationCheckFailed)
 	}

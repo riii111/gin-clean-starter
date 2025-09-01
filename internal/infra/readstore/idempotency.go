@@ -24,7 +24,7 @@ type IdempotencyReadStore struct {
 	queries IdempotencyReadQueries
 }
 
-func NewIdempotencyReadStore(queries *sqlc.Queries) *IdempotencyReadStore {
+func NewIdempotencyReadStore(queries IdempotencyReadQueries) *IdempotencyReadStore {
 	return &IdempotencyReadStore{
 		queries: queries,
 	}

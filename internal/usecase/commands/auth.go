@@ -121,7 +121,9 @@ func (a *authCommandsImpl) RefreshToken(ctx context.Context, refreshToken string
 	}
 
 	// Validate user still exists and is active
-	userReadModel, err := a.readStore.FindByID(ctx, claims.UserID)
+	var userReadModel *queries.AuthorizedUserView
+	db := a.uow.DB(ctx)
+	userReadModel, err = a.readStore.FindByID(ctx, db, claims.UserID)
 	if err != nil || userReadModel == nil {
 		return nil, ErrUserNotFound
 	}
@@ -147,7 +149,11 @@ func (a *authCommandsImpl) RefreshToken(ctx context.Context, refreshToken string
 }
 
 func (a *authCommandsImpl) validateUser(ctx context.Context, credentials user.Credentials) (*queries.AuthorizedUserView, error) {
-	userReadModel, hashedPassword, err := a.readStore.FindByEmail(ctx, credentials.Email().Value())
+	var userReadModel *queries.AuthorizedUserView
+	var hashedPassword string
+	db := a.uow.DB(ctx)
+	var err error
+	userReadModel, hashedPassword, err = a.readStore.FindByEmail(ctx, db, credentials.Email().Value())
 	if err != nil {
 		// Return same error as password mismatch to prevent user enumeration attacks
 		return nil, ErrInvalidCredentials

@@ -14,12 +14,8 @@ import (
 type UnitOfWork interface {
 	// Within: Full transaction for write operations with retry logic
 	Within(ctx context.Context, fn func(ctx context.Context, tx Tx) error) error
-	// WithinReadOnly: Read-only transaction for multi-table consistent reads
-	WithinReadOnly(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
-	// WithDB: Single query operations using implicit transactions
-	WithDB(ctx context.Context, fn func(ctx context.Context, db sqlc.DBTX) error) error
-	// CommandReads: Direct access to command reads for validation outside transactions
-	CommandReads() CommandReads
+	// DB: Direct access to non-transactional DB handle for single-query reads
+	DB(ctx context.Context) sqlc.DBTX
 }
 
 type Tx interface {
@@ -29,16 +25,7 @@ type Tx interface {
 	Idempotency() IdempotencyRepository
 	Notifications() NotificationRepository
 	Users() UserRepository
-	Reads() CommandReads
 	DB() sqlc.DBTX
-}
-
-type CommandReads interface {
-	ResourceByID(ctx context.Context, id uuid.UUID) (*ResourceSnapshot, error)
-	CouponByCode(ctx context.Context, code string) (*CouponSnapshot, error)
-	ReservationByID(ctx context.Context, id uuid.UUID) (*ReservationSnapshot, error)
-	IdempotencyByKey(ctx context.Context, key, userID uuid.UUID) (*IdempotencyRecord, error)
-	ReviewByID(ctx context.Context, id uuid.UUID) (*ReviewSnapshot, error)
 }
 
 // Minimal snapshot for command read operations
@@ -48,6 +35,27 @@ type ReservationSnapshot struct {
 	UserID     uuid.UUID
 	Status     string
 	EndTime    time.Time
+}
+
+// Read store interfaces for commands (snapshots)
+type ResourceReadStore interface {
+	FindByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*ResourceSnapshot, error)
+}
+
+type CouponReadStore interface {
+	FindByCode(ctx context.Context, db sqlc.DBTX, code string) (*CouponSnapshot, error)
+}
+
+type IdempotencyReadStore interface {
+	Get(ctx context.Context, db sqlc.DBTX, key uuid.UUID, userID uuid.UUID) (*IdempotencyRecord, error)
+}
+
+type ReviewReadStore interface {
+	FindSnapshotByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*ReviewSnapshot, error)
+}
+
+type ReservationSnapshotReadStore interface {
+	FindSnapshotByID(ctx context.Context, db sqlc.DBTX, id uuid.UUID) (*ReservationSnapshot, error)
 }
 
 type ReservationRepository interface {

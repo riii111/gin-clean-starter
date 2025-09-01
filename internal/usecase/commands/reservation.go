@@ -64,20 +64,29 @@ type ReservationCommands interface {
 }
 
 type reservationUseCaseImpl struct {
-	uow      shared.UnitOfWork
-	services *reservation.Services
-	clock    clock.Clock
+	uow       shared.UnitOfWork
+	services  *reservation.Services
+	clock     clock.Clock
+	resources shared.ResourceReadStore
+	coupons   shared.CouponReadStore
+	idemReads shared.IdempotencyReadStore
 }
 
 func NewReservationCommands(
 	uow shared.UnitOfWork,
 	services *reservation.Services,
 	clock clock.Clock,
+	resources shared.ResourceReadStore,
+	coupons shared.CouponReadStore,
+	idemReads shared.IdempotencyReadStore,
 ) ReservationCommands {
 	return &reservationUseCaseImpl{
-		uow:      uow,
-		services: services,
-		clock:    clock,
+		uow:       uow,
+		services:  services,
+		clock:     clock,
+		resources: resources,
+		coupons:   coupons,
+		idemReads: idemReads,
 	}
 }
 
@@ -150,7 +159,7 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 	}
 
 	if !inserted {
-		existing, err := tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
+		existing, err := r.idemReads.Get(ctx, tx.DB(), idempotencyKey, userID)
 		if err != nil {
 			return nil, errs.Mark(err, errors.New("failed to read existing idempotency key"))
 		}
@@ -163,7 +172,7 @@ func (r *reservationUseCaseImpl) handleIdempotencyInTx(
 			if rowsAffected > 0 {
 				return nil, nil
 			}
-			existing, err = tx.Reads().IdempotencyByKey(ctx, idempotencyKey, userID)
+			existing, err = r.idemReads.Get(ctx, tx.DB(), idempotencyKey, userID)
 			if err != nil {
 				return nil, errs.Mark(err, errors.New("failed to re-read idempotency key after claim attempt"))
 			}
@@ -254,7 +263,10 @@ func (r *reservationUseCaseImpl) loadSnapshots(
 ) (Snapshots, error) {
 	var snapshots Snapshots
 
-	rs, err := r.uow.CommandReads().ResourceByID(ctx, req.ResourceID)
+	var rs *shared.ResourceSnapshot
+	db := r.uow.DB(ctx)
+	var err error
+	rs, err = r.resources.FindByID(ctx, db, req.ResourceID)
 	if err != nil {
 		if infra.IsKind(err, infra.KindNotFound) {
 			return snapshots, ErrResourceNotFound
@@ -265,7 +277,8 @@ func (r *reservationUseCaseImpl) loadSnapshots(
 
 	if code := req.GetCouponCode(); code != nil {
 		normalizedCode := strings.ToLower(*code)
-		cs, err := r.uow.CommandReads().CouponByCode(ctx, normalizedCode)
+		var cs *shared.CouponSnapshot
+		cs, err = r.coupons.FindByCode(ctx, db, normalizedCode)
 		if err != nil {
 			if infra.IsKind(err, infra.KindNotFound) {
 				return snapshots, ErrCouponNotFound
